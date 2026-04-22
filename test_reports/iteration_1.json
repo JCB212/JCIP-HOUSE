@@ -1,0 +1,45 @@
+{
+  "summary": "Backend: 21/21 pytest cases PASSED covering auth (register/login/me/401), house create/join/list/weight, expense splits (equal/weight/custom/individual + sum validation), contributions, dashboard (balances, debts, expenses_by_category, totals, delete-recalc, payment-affects-balance), and access control (non-member 403). Frontend: core mobile flow works end-to-end — Register -> Onboarding (Create house) -> Dashboard with 5 bottom tabs (Início/Gastos/Acertos/Moradores/Perfil). Moradores tab shows invite code + Copiar/Compartilhar. Expense/new form renders Valor, Descrição, Tipo, Pagador, Categoria, Split (Igual/Por peso/Personalizado), Participantes. Login + Register UI testIDs work.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/houses/{id}/payments", "issue": "Response lacks created Payment object — only {ok,id}. Not blocking but inconsistent with other create endpoints."},
+      {"endpoint": "GET /api/houses/{id}/dashboard", "issue": "In server.py the balance_by dict is computed twice (lines 637-660): first block including contributions is immediately overwritten. Dead code — should be removed for clarity."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "app/(tabs)/profile.tsx onLogout", "issue": "Uses React Native Alert.alert() with confirmation buttons which does NOT render confirmation on Web (RN-Web limitation). In browser, the logout button appears to do nothing unless user is on native device. Consider Platform.OS === 'web' ? window.confirm() : Alert.alert.", "testID": "profile-logout-btn", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard (index)", "issues": ["Two elements display the literal text 'Gasto' — one as a summary card label (R$ 0,00 / Gasto) and one as the '+ Gasto' action button. Consider renaming the card label to 'Gastos' or 'Total Gasto' for clarity and testability."]}
+    ],
+    "react_native_issues": [
+      {"component": "global", "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Coming from an RN library; cosmetic."}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_backend_api.py", "/app/test_reports/pytest/backend_results.xml"],
+  "action_items": [
+    "(optional) Make logout work on web by detecting Platform.OS === 'web' and using window.confirm() fallback, since Alert.alert confirmation buttons don't render on RN-Web.",
+    "(optional) Remove dead-code block in server.py dashboard() (lines 637-650, the first balance_by computation is overwritten at 655).",
+    "(optional) Rename 'Gasto' metric label on dashboard to avoid clash with the '+ Gasto' CTA text."
+  ],
+  "critical_code_review_comments": [
+    "server.py is ~750 lines; consider splitting into routers/houses.py, routers/expenses.py, routers/dashboard.py.",
+    "passlib bcrypt backend emits WARNING on startup (AttributeError: module 'bcrypt' has no attribute '__about__'). Password hashing still works but recommend bcrypt==4.0.1 or installing 'passlib[bcrypt]' 1.7.4+ compatible combo.",
+    "JWT secret is present in committed .env (protected). Ensure production deploys override it.",
+    "No input sanitization on description/notes fields — Pydantic validates types but long strings up to 255 chars are accepted as-is (acceptable for MVP)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_backend_api.py (new)",
+    "/app/test_reports/iteration_1.json (new)",
+    "/app/test_reports/pytest/backend_results.xml (generated)"
+  ],
+  "success_rate": {"backend": "100% (21/21)", "frontend": "95% — all core flows verified; only logout-on-web UX issue"},
+  "seed_data_creation": "Registered seed users alice@test.com / bob@test.com (senha123) as documented in /app/memory/test_credentials.md. They did not exist prior to this iteration. Alice created house 'Casa Alice' (invite 8H4DCIM0).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Seed users alice@test.com and bob@test.com (senha123) now exist. Alice owns 'Casa Alice' (invite 8H4DCIM0). Backend is on MySQL (MariaDB) via MYSQL_URL. Frontend deep links that work: /login, /register, /onboarding, /, /members, /expense/new, /contribution/new, /settings. Bottom tabs render from /(tabs)/_layout.tsx with names index/expenses/debts/members/profile. Playwright caveat: 'text=Gasto' and 'text=Moradores' can match multiple elements; use a[href*='/members'] or data-testid selectors instead.",
+  "rca_of_issue": "N/A — no blocking bugs found. The only functional UX concern is web-Alert.alert fallback for logout confirmation, which doesn't render on RN-Web. RCA: React Native Web implements Alert.alert as a no-op for buttoned confirmations; apps must branch on Platform.OS to use window.confirm()."
+}
