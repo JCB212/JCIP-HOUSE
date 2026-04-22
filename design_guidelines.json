@@ -1,0 +1,104 @@
+{
+  "theme": "light",
+  "archetype": "Organic & Earthy",
+  "domain": "Household Finance / Mobile Web App",
+  "typography": {
+    "fonts": {
+      "heading": "Manrope, sans-serif",
+      "body": "DM Sans, sans-serif",
+      "monospace": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "h1": "text-4xl font-extrabold tracking-tight text-stone-900",
+      "h2": "text-2xl font-bold tracking-tight text-stone-900",
+      "h3": "text-xl font-semibold text-stone-800",
+      "h4": "text-lg font-medium text-stone-800",
+      "body": "text-base font-normal text-stone-600 leading-relaxed",
+      "small": "text-sm font-medium text-stone-500",
+      "tiny": "text-xs font-semibold uppercase tracking-[0.2em] text-stone-400"
+    }
+  },
+  "colors": {
+    "background": "bg-stone-50",
+    "surface": "bg-white",
+    "text_primary": "text-stone-900",
+    "text_secondary": "text-stone-500",
+    "positive": "text-emerald-600",
+    "positive_bg": "bg-emerald-50",
+    "debt": "text-rose-600",
+    "debt_bg": "bg-rose-50",
+    "neutral": "text-blue-600",
+    "neutral_bg": "bg-blue-50",
+    "border": "border-stone-200"
+  },
+  "spacing_and_layout": {
+    "strategy": "Mobile-First App Layout",
+    "container": "w-full max-w-md mx-auto min-h-screen relative pb-24 shadow-2xl bg-stone-50 overflow-hidden",
+    "padding": "px-6 py-8",
+    "cards": "rounded-3xl border border-stone-200/50 bg-white p-6 shadow-sm",
+    "bottom_navigation": "fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md h-20 bg-white/80 backdrop-blur-xl border-t border-stone-200 flex justify-around items-center px-4 z-50",
+    "bento_grid": "grid grid-cols-2 gap-4"
+  },
+  "components": {
+    "buttons": {
+      "primary": "w-full bg-stone-900 text-white rounded-2xl py-4 font-semibold text-base hover:bg-stone-800 transition-colors shadow-md",
+      "secondary": "w-full bg-white border border-stone-200 text-stone-700 rounded-2xl py-4 font-semibold text-base hover:bg-stone-50 transition-colors",
+      "fab": "absolute bottom-6 right-6 w-14 h-14 bg-stone-900 text-white rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform",
+      "action_split": "bg-blue-600 text-white rounded-xl py-3 px-6 font-semibold"
+    },
+    "inputs": {
+      "text": "w-full bg-stone-50 border-0 rounded-2xl px-5 py-4 text-stone-900 text-base focus:ring-2 focus:ring-stone-200 focus:bg-white transition-all placeholder:text-stone-400",
+      "currency": "text-4xl font-extrabold text-stone-900 text-center bg-transparent border-none outline-none focus:ring-0 placeholder:text-stone-300 w-full"
+    },
+    "badges": {
+      "paid": "px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold uppercase tracking-wider",
+      "owed": "px-3 py-1 rounded-full bg-rose-100 text-rose-700 text-xs font-bold uppercase tracking-wider",
+      "split": "px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-bold uppercase tracking-wider"
+    },
+    "bottom_sheet": {
+      "wrapper": "rounded-t-[2rem] bg-white p-6",
+      "handle": "w-12 h-1.5 bg-stone-200 rounded-full mx-auto mb-6"
+    }
+  },
+  "motion": {
+    "hover": "transition-all duration-200 ease-in-out",
+    "tap": "active:scale-95 transition-transform",
+    "page_transition": "animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out"
+  },
+  "icons": {
+    "library": "lucide-react",
+    "style": "stroke-width: 2, modern and rounded",
+    "usage": "Use icons heavily in the bottom nav, lists, and for expense categories (Home, ShoppingBag, Coffee, Zap)."
+  },
+  "media": {
+    "images": [
+      {
+        "category": "onboarding_illustration",
+        "url": "https://static.prod-images.emergentagent.com/jobs/6280e3a6-4c01-4362-a586-46ca5b5c5b81/images/eb037168708d13b8bf22f54052c51dca5388990758a530a754ea290131728ce6.png",
+        "description": "3D illustration of a house with floating coins for the welcome/onboarding screen."
+      },
+      {
+        "category": "user_avatar_1",
+        "url": "https://images.unsplash.com/photo-1707396174323-dd31d3dd4a97?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjV8MHwxfHNlYXJjaHwxfHxzbWlsaW5nJTIwcGVyc29uJTIwcG9ydHJhaXQlMjBhdmF0YXJ8ZW58MHx8fHwxNzc2ODcyNDY4fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Avatar for Roommate 1"
+      },
+      {
+        "category": "user_avatar_2",
+        "url": "https://images.pexels.com/photos/7047890/pexels-photo-7047890.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Avatar for Roommate 2"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Build this as a Mobile-Web experience using pure React (NOT React Native Expo). All files must be .js (.jsx) inside the React project. Do not use .tsx.",
+    "Wrap the main layout in a container with 'max-w-md mx-auto min-h-screen bg-stone-50 relative pb-24 shadow-2xl overflow-hidden' to strictly simulate a mobile app on desktop.",
+    "Implement a fixed bottom navigation bar ('fixed bottom-0 w-full max-w-md left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-xl border-t border-stone-200 z-50') containing links/icons to Dashboard, Add Expense, Debts, and Profile.",
+    "Use Shadcn UI Drawer (Bottom Sheet) for the 'Add Expense' flow to avoid context switching and maintain a mobile app feel.",
+    "Mock all data locally inside the components. Mock multiple roommates (using the avatars), their balances, and a list of recent household expenses.",
+    "The UI must prioritize the requested colors: Green (text-emerald-600) for receiving/positive, Red (text-rose-600) for owing/debt, and Blue (text-blue-600) for neutral/total.",
+    "Ensure 'Quem deve quem' (Who owes whom) is immediately visible on the dashboard using a horizontal scroll or tight list.",
+    "Use 'Manrope' for headings and 'DM Sans' for body text.",
+    "Add 'data-testid' to all interactive elements for testing.",
+    "Do NOT build a traditional desktop layout. Treat the `max-w-md` container as the absolute boundaries of the viewport."
+  ]
+}
