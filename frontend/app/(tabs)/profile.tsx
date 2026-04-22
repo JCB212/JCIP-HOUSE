@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -10,16 +10,19 @@ export default function Profile() {
   const router = useRouter();
 
   async function onLogout() {
+    const doLogout = async () => {
+      await logout();
+      router.replace("/login");
+    };
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm("Tem certeza que deseja sair?")) {
+        await doLogout();
+      }
+      return;
+    }
     Alert.alert("Sair", "Tem certeza que deseja sair?", [
       { text: "Cancelar", style: "cancel" },
-      {
-        text: "Sair",
-        style: "destructive",
-        onPress: async () => {
-          await logout();
-          router.replace("/login");
-        },
-      },
+      { text: "Sair", style: "destructive", onPress: doLogout },
     ]);
   }
 
