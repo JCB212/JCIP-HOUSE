@@ -1,14 +1,7 @@
 import { useState } from "react";
 import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
+  View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, Alert,
+  KeyboardAvoidingView, Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -25,6 +18,8 @@ export default function Settings() {
     house?.members.forEach((m) => (w[m.user_id] = String(m.weight)));
     return w;
   });
+  const [startDay, setStartDay] = useState(String(house?.month_start_day || 1));
+  const [houseName, setHouseName] = useState(house?.name || "");
 
   async function saveWeight(userId: string) {
     const v = parseFloat((weights[userId] || "1").replace(",", ".")) || 1;
@@ -34,7 +29,21 @@ export default function Settings() {
         weight: v,
       });
       setHouse(updated as any);
-      Alert.alert("Salvo", "Peso atualizado!");
+    } catch (e: any) {
+      Alert.alert("Erro", e.message);
+    }
+  }
+
+  async function saveHouseSettings() {
+    const day = parseInt(startDay) || 1;
+    if (day < 1 || day > 28) { Alert.alert("Atenção", "Dia entre 1 e 28"); return; }
+    try {
+      const updated: any = await api.put(`/houses/${house!.id}/settings`, {
+        name: houseName.trim() || undefined,
+        month_start_day: day,
+      });
+      setHouse(updated);
+      Alert.alert("✅", "Configurações salvas!");
     } catch (e: any) {
       Alert.alert("Erro", e.message);
     }
@@ -77,7 +86,32 @@ export default function Settings() {
           <Text style={styles.section}>Casa</Text>
           <View style={styles.card}>
             <Text style={styles.label}>Nome</Text>
-            <Text style={styles.value}>{house.name}</Text>
+            <TextInput
+              testID="settings-house-name"
+              style={styles.textInput}
+              value={houseName}
+              onChangeText={setHouseName}
+              editable={house.owner_id === user?.id}
+            />
+
+            <Text style={[styles.label, { marginTop: spacing.md }]}>Dia de início do mês (1-28)</Text>
+            <TextInput
+              testID="settings-start-day"
+              style={styles.textInput}
+              value={startDay}
+              onChangeText={setStartDay}
+              keyboardType="number-pad"
+              editable={house.owner_id === user?.id}
+            />
+            <Text style={styles.hint}>
+              Define quando começa um novo "mês financeiro". Ex.: dia 5 = mês vai do dia 5 ao dia 5 seguinte.
+            </Text>
+
+            {house.owner_id === user?.id && (
+              <TouchableOpacity testID="save-house-settings" style={styles.saveBtn} onPress={saveHouseSettings}>
+                <Text style={styles.saveBtnTxt}>Salvar casa</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <Text style={styles.section}>Pesos de divisão</Text>
@@ -142,7 +176,12 @@ const styles = StyleSheet.create({
   },
   label: { color: colors.textSecondary, fontSize: 12 },
   value: { color: colors.textPrimary, fontWeight: "700", fontSize: 16, marginTop: 2 },
-  hint: { color: colors.textSecondary, fontSize: 13, marginBottom: spacing.md, lineHeight: 18 },
+  textInput: { backgroundColor: colors.bg, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 12,
+    fontSize: 15, color: colors.textPrimary, marginTop: 4 },
+  saveBtn: { marginTop: spacing.md, backgroundColor: colors.primary, paddingVertical: 12,
+    borderRadius: radius.md, alignItems: "center" },
+  saveBtnTxt: { color: "#fff", fontWeight: "700" },
+  hint: { color: colors.textSecondary, fontSize: 12, marginTop: 6, lineHeight: 16 },
   weightRow: {
     flexDirection: "row",
     alignItems: "center",

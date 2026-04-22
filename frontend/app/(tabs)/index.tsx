@@ -1,104 +1,107 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
+  ActivityIndicator, Alert, Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api";
 import { useAuth } from "../../src/AuthContext";
-import { colors, formatBRL, radius, shadows, spacing } from "../../src/theme";
+import { colors, formatBRL, radius, spacing } from "../../src/theme";
 
-type DashboardData = {
-  house_id: string;
-  house_name: string;
-  currency: string;
-  total_expenses_month: number;
-  total_contributions_month: number;
-  house_balance: number;
-  members_summary: Array<{
-    user_id: string;
-    name: string;
-    total_paid: number;
-    total_share: number;
-    total_contributed: number;
-    balance: number;
-  }>;
-  debts: Array<{
-    from_user_id: string;
-    from_name: string;
-    to_user_id: string;
-    to_name: string;
-    amount: number;
-  }>;
-  expenses_by_category: Array<{ name: string; icon: string; color: string; total: number }>;
-  recent_expenses: Array<any>;
+type MonthOut = {
+  id: string; year: number; month_number: number; status: string;
+  start_date: string; end_date: string; carried_balance: number; closed_at?: string | null;
 };
+
+const MONTH_NAMES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 
 export default function Home() {
   const { house, user } = useAuth();
   const router = useRouter();
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [data, setData] = useState<any>(null);
+  const [months, setMonths] = useState<MonthOut[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   const load = useCallback(async () => {
     if (!house) return;
     try {
-      const d = await api.get<DashboardData>(`/houses/${house.id}/dashboard`);
-      setData(d);
-    } catch (e) {
+      const [mlist, dash] = await Promise.all([
+        api.get<MonthOut[]>(`/houses/${house.id}/months`),
+        api.get<any>(`/houses/${house.id}/dashboard${selectedMonth ? `?month_id=${selectedMonth}` : ""}`),
+      ]);
+      setMonths(mlist);
+      setData(dash);
+      if (!selectedMonth) setSelectedMonth(dash.current_month.id);
+    } catch (e: any) {
       console.error(e);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [house]);
+  }, [house, selectedMonth]);
 
-  useFocusEffect(
-    useCallback(() => {
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  async function generateRecurring() {
+    if (!house) return;
+    setGenerating(true);
+    try {
+      const r: any = await api.post(`/houses/${house.id}/months/current/generate`);
+      Alert.alert("✅ Gerado", `Despesas fixas: ${r.created_expenses}\nContribuições: ${r.created_contributions}`);
       load();
-    }, [load])
-  );
+    } catch (e: any) {
+      Alert.alert("Erro", e.message);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function closeMonth() {
+    if (!data?.current_month) return;
+    const confirm = async (carry: boolean) => {
+      try {
+        await api.post(`/houses/${house!.id}/months/${data.current_month.id}/close`,
+          { carry_balance: carry });
+        Alert.alert("✅", "Mês fechado!");
+        load();
+      } catch (e: any) {
+        Alert.alert("Erro", e.message);
+      }
+    };
+    if (Platform.OS === "web") {
+      const carry = window.confirm("Fechar o mês?\n\nCarregar saldo para o próximo mês?");
+      if (carry !== null) await confirm(carry);
+      return;
+    }
+    Alert.alert("Fechar mês", "Deseja carregar o saldo para o próximo mês?", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Não carregar", onPress: () => confirm(false) },
+      { text: "Carregar saldo", onPress: () => confirm(true) },
+    ]);
+  }
 
   if (!house) {
-    return (
-      <SafeAreaView style={styles.center}>
-        <Text style={styles.subtitle}>Nenhuma casa selecionada</Text>
-      </SafeAreaView>
-    );
+    return <SafeAreaView style={styles.center}><Text>Nenhuma casa</Text></SafeAreaView>;
   }
 
   if (loading) {
-    return (
-      <SafeAreaView style={styles.center}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </SafeAreaView>
-    );
+    return <SafeAreaView style={styles.center}><ActivityIndicator size="large" color={colors.primary}/></SafeAreaView>;
   }
 
-  const totalCat = (data?.expenses_by_category || []).reduce((s, c) => s + c.total, 0);
+  const cm = data?.current_month as MonthOut;
+  const isClosed = cm?.status === "closed";
+  const totalCat = (data?.expenses_by_category || []).reduce((s: number, c: any) => s + c.total, 0);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top"]}>
       <ScrollView
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: 100 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              load();
-            }}
-            tintColor={colors.primary}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
       >
         {/* Header */}
         <View style={styles.headerRow}>
@@ -106,126 +109,146 @@ export default function Home() {
             <Text style={styles.hello}>Olá, {user?.name?.split(" ")[0]}</Text>
             <Text style={styles.houseTitle}>{house.name}</Text>
           </View>
-          <TouchableOpacity
-            testID="home-settings-btn"
-            onPress={() => router.push("/settings")}
-            style={styles.iconBtn}
-          >
+          <TouchableOpacity testID="home-settings-btn" onPress={() => router.push("/settings")} style={styles.iconBtn}>
             <Ionicons name="settings-outline" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
 
-        {/* Balance Card */}
+        {/* Month selector */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, paddingVertical: spacing.md }}>
+          {months.slice(0, 12).reverse().map((m) => {
+            const sel = m.id === selectedMonth;
+            return (
+              <TouchableOpacity key={m.id} testID={`month-${m.year}-${m.month_number}`}
+                style={[styles.monthChip, sel && styles.monthChipActive,
+                        m.status === "closed" && styles.monthChipClosed]}
+                onPress={() => setSelectedMonth(m.id)}>
+                <Text style={[styles.monthChipTxt, sel && styles.monthChipTxtActive]}>
+                  {MONTH_NAMES[m.month_number - 1]}/{String(m.year).slice(2)}
+                </Text>
+                {m.status === "closed" && <Ionicons name="lock-closed" size={10} color={sel ? "#fff" : colors.debt} />}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Balance card */}
         <View style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>Saldo da casa (mês)</Text>
-          <Text
-            style={[
-              styles.balanceValue,
-              { color: (data?.house_balance || 0) >= 0 ? colors.positive : colors.debt },
-            ]}
-          >
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={styles.balanceLabel}>Saldo do mês</Text>
+            {isClosed && (
+              <View style={styles.closedBadge}>
+                <Ionicons name="lock-closed" size={10} color="#fff" />
+                <Text style={styles.closedBadgeTxt}>FECHADO</Text>
+              </View>
+            )}
+          </View>
+          <Text style={[styles.balanceValue, { color: (data?.house_balance || 0) >= 0 ? "#86efac" : "#fca5a5" }]}>
             {formatBRL(data?.house_balance || 0, data?.currency)}
           </Text>
+          {(data?.carried_balance || 0) !== 0 && (
+            <Text style={styles.carriedTxt}>
+              📤 Saldo carregado: {formatBRL(data.carried_balance, data?.currency)}
+            </Text>
+          )}
           <View style={styles.balanceRow}>
             <View style={styles.balanceItem}>
-              <Ionicons name="arrow-up" size={14} color={colors.positive} />
               <Text style={styles.balanceItemLabel}>Contribuído</Text>
-              <Text style={[styles.balanceItemValue, { color: colors.positive }]}>
+              <Text style={[styles.balanceItemValue, { color: "#86efac" }]}>
                 {formatBRL(data?.total_contributions_month || 0, data?.currency)}
               </Text>
             </View>
             <View style={[styles.balanceItem, { alignItems: "flex-end" }]}>
-              <Ionicons name="arrow-down" size={14} color={colors.debt} />
               <Text style={styles.balanceItemLabel}>Gasto</Text>
-              <Text style={[styles.balanceItemValue, { color: colors.debt }]}>
+              <Text style={[styles.balanceItemValue, { color: "#fca5a5" }]}>
                 {formatBRL(data?.total_expenses_month || 0, data?.currency)}
               </Text>
             </View>
           </View>
         </View>
 
-        {/* Quick Actions */}
+        {/* Fixed vs Variable */}
+        <View style={styles.fvRow}>
+          <View style={[styles.fvCard, { backgroundColor: colors.neutralBg }]}>
+            <Ionicons name="repeat" size={18} color={colors.neutral} />
+            <Text style={[styles.fvLabel, { color: colors.neutral }]}>Fixas</Text>
+            <Text style={styles.fvValue}>{formatBRL(data?.total_fixed_expenses || 0, data?.currency)}</Text>
+          </View>
+          <View style={[styles.fvCard, { backgroundColor: colors.positiveBg }]}>
+            <Ionicons name="flash" size={18} color={colors.positive} />
+            <Text style={[styles.fvLabel, { color: colors.positive }]}>Variáveis</Text>
+            <Text style={styles.fvValue}>{formatBRL(data?.total_variable_expenses || 0, data?.currency)}</Text>
+          </View>
+        </View>
+
+        {/* Actions */}
         <View style={styles.actionsRow}>
-          <TouchableOpacity
-            testID="home-add-expense-btn"
-            style={[styles.actionBtn, { backgroundColor: colors.primary }]}
-            onPress={() => router.push("/expense/new")}
-          >
-            <Ionicons name="add" size={20} color="#fff" />
+          <TouchableOpacity testID="home-add-expense-btn"
+            style={[styles.actionBtn, { backgroundColor: colors.primary }, isClosed && { opacity: 0.4 }]}
+            disabled={isClosed}
+            onPress={() => router.push("/expense/new")}>
+            <Ionicons name="add" size={18} color="#fff" />
             <Text style={styles.actionText}>Gasto</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            testID="home-add-contribution-btn"
-            style={[styles.actionBtn, { backgroundColor: colors.positive }]}
-            onPress={() => router.push("/contribution/new")}
-          >
-            <Ionicons name="cash" size={20} color="#fff" />
-            <Text style={styles.actionText}>Contribuição</Text>
+          <TouchableOpacity testID="home-add-contribution-btn"
+            style={[styles.actionBtn, { backgroundColor: colors.positive }, isClosed && { opacity: 0.4 }]}
+            disabled={isClosed}
+            onPress={() => router.push("/contribution/new")}>
+            <Ionicons name="cash" size={18} color="#fff" />
+            <Text style={styles.actionText}>Contrib.</Text>
+          </TouchableOpacity>
+          <TouchableOpacity testID="home-generate-recurring-btn"
+            style={[styles.actionBtn, { backgroundColor: colors.neutral }]}
+            disabled={generating}
+            onPress={generateRecurring}>
+            {generating ? <ActivityIndicator color="#fff" size="small"/> : <Ionicons name="repeat" size={18} color="#fff" />}
+            <Text style={styles.actionText}>Gerar fixas</Text>
           </TouchableOpacity>
         </View>
+
+        {!isClosed && (
+          <TouchableOpacity testID="btn-close-month" onPress={closeMonth} style={styles.closeMonthBtn}>
+            <Ionicons name="lock-closed-outline" size={16} color={colors.debt} />
+            <Text style={styles.closeMonthTxt}>Fechar mês</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Debts */}
         {(data?.debts?.length || 0) > 0 && (
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Quem deve para quem</Text>
-              <TouchableOpacity onPress={() => router.push("/(tabs)/debts")}>
-                <Text style={styles.linkText}>Ver tudo</Text>
-              </TouchableOpacity>
-            </View>
-            {data!.debts.slice(0, 4).map((d, i) => (
-              <View key={i} style={styles.debtCard} testID={`debt-${i}`}>
+            <Text style={styles.sectionTitle}>Quem deve para quem</Text>
+            {data.debts.slice(0, 4).map((d: any, i: number) => (
+              <View key={i} style={styles.debtCard}>
                 <View style={styles.debtIcon}>
-                  <Ionicons name="arrow-forward" size={18} color={colors.debt} />
+                  <Ionicons name="arrow-forward" size={16} color={colors.debt} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.debtText}>
-                    <Text style={{ fontWeight: "700" }}>{d.from_name}</Text> deve para{" "}
-                    <Text style={{ fontWeight: "700" }}>{d.to_name}</Text>
+                    <Text style={{ fontWeight: "700" }}>{d.from_name}</Text> deve para <Text style={{ fontWeight: "700" }}>{d.to_name}</Text>
                   </Text>
-                  <Text style={[styles.debtAmount]}>
-                    {formatBRL(d.amount, data?.currency)}
-                  </Text>
+                  <Text style={styles.debtAmount}>{formatBRL(d.amount, data?.currency)}</Text>
                 </View>
               </View>
             ))}
           </View>
         )}
 
-        {/* Members summary */}
+        {/* Members */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Resumo dos moradores (mês)</Text>
-          {(data?.members_summary || []).map((m) => (
-            <View key={m.user_id} style={styles.memberCard} testID={`member-${m.user_id}`}>
-              <View style={styles.memberAvatar}>
-                <Text style={styles.memberAvatarText}>
-                  {m.name.substring(0, 1).toUpperCase()}
-                </Text>
-              </View>
+          <Text style={styles.sectionTitle}>Resumo dos moradores</Text>
+          {(data?.members_summary || []).map((m: any) => (
+            <View key={m.user_id} style={styles.memberCard}>
+              <View style={styles.memberAvatar}><Text style={styles.memberAvatarText}>{m.name[0]?.toUpperCase()}</Text></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.memberName}>{m.name}</Text>
                 <Text style={styles.memberSub}>
-                  Pagou {formatBRL(m.total_paid, data?.currency)} • Cabe{" "}
-                  {formatBRL(m.total_share, data?.currency)}
+                  Pagou {formatBRL(m.total_paid, data?.currency)} • Cabe {formatBRL(m.total_share, data?.currency)}
                 </Text>
               </View>
-              <View
-                style={[
-                  styles.balancePill,
-                  {
-                    backgroundColor:
-                      m.balance >= 0 ? colors.positiveBg : colors.debtBg,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.balancePillText,
-                    { color: m.balance >= 0 ? colors.positive : colors.debt },
-                  ]}
-                >
-                  {m.balance >= 0 ? "+" : ""}
-                  {formatBRL(m.balance, data?.currency)}
+              <View style={[styles.balancePill, { backgroundColor: m.balance >= 0 ? colors.positiveBg : colors.debtBg }]}>
+                <Text style={[styles.balancePillText, { color: m.balance >= 0 ? colors.positive : colors.debt }]}>
+                  {m.balance >= 0 ? "+" : ""}{formatBRL(m.balance, data?.currency)}
                 </Text>
               </View>
             </View>
@@ -236,7 +259,7 @@ export default function Home() {
         {(data?.expenses_by_category?.length || 0) > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Gastos por categoria</Text>
-            {data!.expenses_by_category.slice(0, 6).map((c, i) => {
+            {data.expenses_by_category.slice(0, 6).map((c: any, i: number) => {
               const pct = totalCat > 0 ? (c.total / totalCat) * 100 : 0;
               return (
                 <View key={i} style={styles.catRow}>
@@ -244,17 +267,10 @@ export default function Home() {
                   <View style={{ flex: 1 }}>
                     <View style={styles.catLabelRow}>
                       <Text style={styles.catName}>{c.name}</Text>
-                      <Text style={styles.catAmount}>
-                        {formatBRL(c.total, data?.currency)}
-                      </Text>
+                      <Text style={styles.catAmount}>{formatBRL(c.total, data?.currency)}</Text>
                     </View>
                     <View style={styles.catBarBg}>
-                      <View
-                        style={[
-                          styles.catBarFill,
-                          { width: `${pct}%`, backgroundColor: c.color },
-                        ]}
-                      />
+                      <View style={[styles.catBarFill, { width: `${pct}%`, backgroundColor: c.color }]} />
                     </View>
                   </View>
                 </View>
@@ -263,35 +279,26 @@ export default function Home() {
           </View>
         )}
 
-        {/* Recent expenses */}
+        {/* Recent */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Gastos recentes</Text>
-            <TouchableOpacity onPress={() => router.push("/(tabs)/expenses")}>
-              <Text style={styles.linkText}>Ver tudo</Text>
-            </TouchableOpacity>
-          </View>
-          {(data?.recent_expenses || []).slice(0, 5).map((e: any) => (
-            <View key={e.id} style={styles.expenseCard}>
-              <View
-                style={[
-                  styles.catIconBg,
-                  { backgroundColor: (e.category_color || colors.neutral) + "22" },
-                ]}
-              >
-                <Ionicons name="receipt-outline" size={18} color={e.category_color || colors.neutral} />
+          <Text style={styles.sectionTitle}>Gastos recentes</Text>
+          {(data?.recent_expenses || []).length === 0 ? (
+            <Text style={styles.empty}>Nenhum gasto neste mês ainda.</Text>
+          ) : (
+            data.recent_expenses.slice(0, 5).map((e: any) => (
+              <View key={e.id} style={styles.expCard}>
+                <View style={[styles.catIconBg, { backgroundColor: (e.category_color || colors.neutral) + "22" }]}>
+                  <Ionicons name={e.is_recurring_instance ? "repeat" : "receipt-outline"} size={16} color={e.category_color || colors.neutral} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.expDesc}>{e.description}</Text>
+                  <Text style={styles.expMeta}>
+                    {e.payer_name} • {e.category_name || "—"}{e.has_items ? " • 🛒" : ""}{!e.is_paid ? " • PENDENTE" : ""}
+                  </Text>
+                </View>
+                <Text style={styles.expAmount}>{formatBRL(e.amount, data?.currency)}</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.expDesc}>{e.description}</Text>
-                <Text style={styles.expMeta}>
-                  {e.payer_name} • {e.category_name || "Sem categoria"}
-                </Text>
-              </View>
-              <Text style={styles.expAmount}>{formatBRL(e.amount, data?.currency)}</Text>
-            </View>
-          ))}
-          {(data?.recent_expenses?.length || 0) === 0 && (
-            <Text style={styles.empty}>Nenhum gasto ainda. Adicione o primeiro!</Text>
+            ))
           )}
         </View>
       </ScrollView>
@@ -301,124 +308,79 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.bg },
-  subtitle: { color: colors.textSecondary },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   hello: { color: colors.textSecondary, fontSize: 14 },
   houseTitle: { fontSize: 22, fontWeight: "800", color: colors.textPrimary },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  balanceCard: {
-    marginTop: spacing.lg,
-    backgroundColor: colors.primary,
-    borderRadius: radius.xl,
-    padding: spacing.lg,
-  },
+  iconBtn: { width: 40, height: 40, backgroundColor: colors.surface, borderRadius: 12,
+    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
+
+  monthChip: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12,
+    paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border },
+  monthChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  monthChipClosed: { borderStyle: "dashed" },
+  monthChipTxt: { color: colors.textSecondary, fontSize: 12, fontWeight: "700" },
+  monthChipTxtActive: { color: "#fff" },
+
+  balanceCard: { backgroundColor: colors.primary, borderRadius: radius.xl, padding: spacing.lg, marginTop: 4 },
   balanceLabel: { color: "#d6d3d1", fontSize: 13 },
-  balanceValue: { color: "#fff", fontSize: 34, fontWeight: "800", marginTop: 4 },
+  balanceValue: { fontSize: 32, fontWeight: "800", marginTop: 4 },
+  carriedTxt: { color: "#d6d3d1", fontSize: 12, marginTop: 4 },
   balanceRow: { flexDirection: "row", justifyContent: "space-between", marginTop: spacing.md },
   balanceItem: { flex: 1 },
-  balanceItemLabel: { color: "#d6d3d1", fontSize: 12, marginTop: 4 },
-  balanceItemValue: { fontSize: 15, fontWeight: "700", marginTop: 2 },
-  actionsRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
-  actionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: radius.lg,
-    gap: 6,
-  },
-  actionText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  balanceItemLabel: { color: "#d6d3d1", fontSize: 11, marginTop: 4 },
+  balanceItemValue: { fontSize: 14, fontWeight: "700", marginTop: 2 },
+  closedBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.debt,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
+  closedBadgeTxt: { color: "#fff", fontSize: 9, fontWeight: "800", letterSpacing: 1 },
+
+  fvRow: { flexDirection: "row", gap: 8, marginTop: spacing.md },
+  fvCard: { flex: 1, padding: spacing.md, borderRadius: radius.lg, gap: 4 },
+  fvLabel: { fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1 },
+  fvValue: { fontSize: 16, fontWeight: "800", color: colors.textPrimary },
+
+  actionsRow: { flexDirection: "row", gap: 6, marginTop: spacing.md },
+  actionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    paddingVertical: 12, borderRadius: radius.lg, gap: 4 },
+  actionText: { color: "#fff", fontWeight: "700", fontSize: 12 },
+  closeMonthBtn: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6,
+    marginTop: spacing.sm, paddingVertical: 10, borderRadius: radius.lg, borderWidth: 1,
+    borderColor: colors.border, borderStyle: "dashed" },
+  closeMonthTxt: { color: colors.debt, fontWeight: "700", fontSize: 13 },
+
   section: { marginTop: spacing.xl },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: spacing.md,
-  },
-  sectionTitle: { fontSize: 16, fontWeight: "700", color: colors.textPrimary, marginBottom: spacing.sm },
-  linkText: { color: colors.neutral, fontWeight: "600", fontSize: 13 },
-  debtCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  debtIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: colors.debtBg,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: spacing.md,
-  },
-  debtText: { color: colors.textPrimary },
-  debtAmount: { color: colors.debt, fontWeight: "700", fontSize: 15, marginTop: 2 },
-  memberCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  memberAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.neutralBg,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: spacing.md,
-  },
-  memberAvatarText: { color: colors.neutral, fontWeight: "800", fontSize: 16 },
-  memberName: { fontWeight: "700", color: colors.textPrimary, fontSize: 15 },
-  memberSub: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-  balancePill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill },
-  balancePillText: { fontSize: 12, fontWeight: "800" },
-  catRow: { flexDirection: "row", alignItems: "center", marginBottom: spacing.md, gap: spacing.sm },
+  sectionTitle: { fontSize: 14, fontWeight: "700", color: colors.textPrimary, marginBottom: spacing.sm },
+  debtCard: { flexDirection: "row", alignItems: "center", backgroundColor: colors.surface,
+    padding: spacing.md, borderRadius: radius.lg, marginBottom: 6, borderWidth: 1, borderColor: colors.border },
+  debtIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: colors.debtBg,
+    alignItems: "center", justifyContent: "center", marginRight: spacing.md },
+  debtText: { color: colors.textPrimary, fontSize: 13 },
+  debtAmount: { color: colors.debt, fontWeight: "700", fontSize: 14, marginTop: 2 },
+
+  memberCard: { flexDirection: "row", alignItems: "center", backgroundColor: colors.surface,
+    padding: spacing.md, borderRadius: radius.lg, marginBottom: 6, borderWidth: 1, borderColor: colors.border },
+  memberAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.neutralBg,
+    alignItems: "center", justifyContent: "center", marginRight: spacing.md },
+  memberAvatarText: { color: colors.neutral, fontWeight: "800" },
+  memberName: { fontWeight: "700", color: colors.textPrimary, fontSize: 14 },
+  memberSub: { color: colors.textSecondary, fontSize: 11, marginTop: 2 },
+  balancePill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill },
+  balancePillText: { fontSize: 11, fontWeight: "800" },
+
+  catRow: { flexDirection: "row", alignItems: "center", marginBottom: spacing.sm, gap: 8 },
   catDot: { width: 10, height: 10, borderRadius: 5 },
-  catLabelRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
-  catName: { color: colors.textPrimary, fontSize: 13, fontWeight: "600" },
-  catAmount: { color: colors.textPrimary, fontSize: 13, fontWeight: "700" },
-  catBarBg: { height: 6, backgroundColor: colors.borderLight, borderRadius: 3 },
-  catBarFill: { height: 6, borderRadius: 3 },
-  expenseCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  catIconBg: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: spacing.md,
-  },
-  expDesc: { color: colors.textPrimary, fontWeight: "600" },
-  expMeta: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-  expAmount: { color: colors.textPrimary, fontWeight: "800", fontSize: 15 },
+  catLabelRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 3 },
+  catName: { color: colors.textPrimary, fontSize: 12, fontWeight: "600" },
+  catAmount: { color: colors.textPrimary, fontSize: 12, fontWeight: "700" },
+  catBarBg: { height: 5, backgroundColor: colors.borderLight, borderRadius: 3 },
+  catBarFill: { height: 5, borderRadius: 3 },
+
+  expCard: { flexDirection: "row", alignItems: "center", backgroundColor: colors.surface,
+    padding: spacing.md, borderRadius: radius.lg, marginBottom: 6, borderWidth: 1, borderColor: colors.border },
+  catIconBg: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center",
+    marginRight: spacing.md },
+  expDesc: { color: colors.textPrimary, fontWeight: "600", fontSize: 14 },
+  expMeta: { color: colors.textSecondary, fontSize: 11, marginTop: 2 },
+  expAmount: { color: colors.textPrimary, fontWeight: "800", fontSize: 14 },
   empty: { color: colors.textSecondary, textAlign: "center", padding: spacing.lg },
 });

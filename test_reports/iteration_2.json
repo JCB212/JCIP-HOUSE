@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration 2 (Mês Financeiro + Mercado + Recorrentes + Planos de Contribuição) fully verified. Backend: 18/18 new pytest cases PASSED in test_iteration2_features.py covering month_start_day persistence + PUT /settings (owner-only enforced 403 for non-owner), GET /months auto-create honoring start_day=5 (start_date day == 5), close-month computes carried_balance=contribs−expenses when carry_balance=true (asserted =60), expense create/delete in closed month -> 400, reopen restores status=open, expense with items auto-computes amount and has_items=true (2×15+1×10=40 verified), expense without items & no amount -> 400, default 'Supermercado' has is_market_style=true, subcategories accept parent_id, CRUD /recurring (create/list/update), upsert-by-user /contribution-plans (POST twice → same id, amount updated), POST /months/current/generate idempotent (2nd call returns 0/0), generated expenses flagged is_recurring_instance=true & is_paid=false, dashboard returns current_month/carried_balance/total_fixed_expenses/total_variable_expenses with house_balance=contribs+carried−expenses. Frontend (Expo web, mobile 375×667): verified Dashboard shows month pill 'Abr/26', Saldo/Contribuído/Gasto cards, separate FIXAS vs VARIÁVEIS cards, '+ Gasto', 'Contrib.', 'Gerar fixas', 'Fechar mês' buttons, Settings nav. Recorrentes tab renders sub-tabs 'Despesas fixas' / 'Contribuições' with add button, create modal opens with save-recurring testID. Settings screen exposes house-name, start-day (value=1 default, editable 1-28), Salvar casa button (owner). Novo gasto: selecting 'Supermercado' (is_market_style) reveals 'Modo mercado' banner + Itens list + Adicionar item button + Total auto-calculated.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/houses/{id}/recurring (server.py:503)", "issue": "Dead ternary: `return list_recurring.__wrapped__(...)[-1] if False else RecurringOut(...)`. The `if False else` always evaluates to the RHS; remove the unreachable branch for clarity."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard", "issues": ["FIXAS / VARIÁVEIS cards render but their uppercase label is implemented via CSS text-transform; the raw text content is 'Fixas'/'Variáveis'. Cosmetic only."]}
+    ],
+    "react_native_issues": [
+      {"component": "global", "issue": "Persistent RN-web console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' (upstream RN lib, cosmetic, unchanged from iteration 1)."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration2_features.py",
+    "/app/backend/tests/test_backend_api.py",
+    "/app/test_reports/pytest/iteration2_results.xml"
+  ],
+  "action_items": [
+    "(optional) Clean up dead code in server.py line 503 (list_recurring.__wrapped__ if False else ...)",
+    "(from prior iteration, optional) Replace Alert.alert confirmation on logout with window.confirm on web"
+  ],
+  "critical_code_review_comments": [
+    "server.py reached 761 lines — now above the 700 line guideline. Recommend splitting into routers/ (auth, houses, categories, months, expenses, contributions, recurring, dashboard).",
+    "RecurringExpense.day_of_month only honors 1-28 via clamp; if someone enters 31 it silently clamps (intentional for Feb safety; worth documenting in UI tooltip).",
+    "close_month computes balance using only Expense (collective) - correct per spec; make sure UI shows preview before closing so users understand the carried_balance value.",
+    "generate endpoint only handles frequency='monthly'; weekly/yearly recurrings are silently skipped. Consider returning a 'skipped' counter or log for transparency."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration2_features.py (new — 18 tests, all passing)",
+    "/app/test_reports/iteration_2.json (this file)",
+    "/app/test_reports/pytest/iteration2_results.xml (pytest junit output)"
+  ],
+  "success_rate": {"backend": "100% (18/18 iteration-2 tests + 21/21 iteration-1 regression still green)", "frontend": "100% of iteration-2 testIDs present & reachable on mobile viewport 375×667"},
+  "seed_data_creation": "Test fixtures create TEST_it2_alice_<suf>@test.com and TEST_it2_bob_<suf>@test.com + TEST_Casa_It2_<suf> house per test-module run (isolated). Frontend test created one-off uiit2_<suf>@test.com + 'Casa UI It2'.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All Iteration-2 backend features GREEN. To reproduce: `pytest /app/backend/tests/test_iteration2_features.py -v`. Frontend flows with testIDs verified: home-settings-btn, home-add-expense-btn, home-add-contribution-btn, home-generate-recurring-btn, btn-close-month, month-<y>-<m>, tab-fixed, tab-plans, recurring-add-btn, save-recurring, save-plan, settings-house-name, settings-start-day, save-house-settings, new-expense-amount, new-expense-desc, add-item-btn, new-expense-submit. For close-month on web use window.confirm handler. Note: default house created via onboarding UI uses month_start_day=1 (UI has no field to pick it on creation — user sets it afterwards via Settings).",
+  "rca_of_issue": "No blocking bugs. Only a trivial dead-code branch in create_recurring (`if False else`) — harmless."
+}
