@@ -1,40 +1,51 @@
-# JCIP House Finance — PRD (Product Requirements)
-
-## Visão
-App mobile colaborativo de controle financeiro residencial. Permite que moradores
-registrem gastos, contribuições e o sistema calcula automaticamente as divisões
-e quem deve para quem.
+# JCIP House Finance — PRD (v3.0)
 
 ## Stack
-- **Frontend**: React Native / Expo (SDK 54), Expo Router
-- **Backend**: FastAPI + SQLAlchemy + PyMySQL
-- **Banco**: MySQL / MariaDB (para hospedagem Hostinger)
+- **Backend**: Node.js 20 + Express + mysql2 + bcryptjs + jsonwebtoken
+- **Frontend**: React Native / Expo SDK 54 (Expo Router)
+- **Banco**: MySQL 8 / MariaDB 10.11 (Hostinger compatível)
 - **Auth**: JWT (email + senha, bcrypt)
 
-## Funcionalidades (MVP implementado)
-- Cadastro / Login com JWT
-- Criar Casa ou Entrar com código de convite
-- Dashboard (saldo da casa, gasto do mês, resumo por morador, quem deve para quem)
-- Registrar gastos com:
-  - Tipo coletivo ou individual
-  - Divisão: igual, por peso, personalizada, individual
-  - Categoria e observações
-- Registrar contribuições (fundo da casa)
-- Lista de gastos com filtro
-- Acertos de conta (cálculo otimizado de transferências)
-- Gerenciar moradores e pesos
-- Múltiplas casas por usuário
-- SQL schema pronto para Hostinger (`/app/database.sql`)
-- Documentação de build APK (`/app/APK_BUILD_INSTRUCTIONS.md`)
+## Arquivos principais
+- `/app/backend-node/` — único app Node.js para deploy Hostinger
+- `/app/frontend/` — app Expo (gera APK via EAS Build)
+- `/app/database.sql` — 13 tabelas prontas pra importar no phpMyAdmin
+- `/app/APK_BUILD_INSTRUCTIONS.md` — guia completo passo-a-passo
 
-## Banco de dados
-Tabelas: users, houses, house_members, categories, expenses,
-expense_participants, contributions, payments, activity_logs.
+## Funcionalidades
+- Auth JWT (register, login, /me)
+- Casas compartilhadas com código de convite
+- Pesos por membro (divisão por peso)
+- Dashboard com:
+  - Seletor de meses (ciclos com start_day configurável 1-28)
+  - Saldo do mês + saldo carregado
+  - Gastos fixos vs variáveis
+  - Gastos por categoria com barras
+  - Resumo por morador
+  - Otimização de dívidas ("quem deve para quem")
+  - Gastos recentes
+- Gastos com:
+  - 4 modos de divisão (igual / peso / custom / individual)
+  - Modo Mercado (lista de itens qtd × preço unitário)
+  - Marcador "pago / pendente"
+  - Coletivo ou individual
+- Contribuições (aportes ao caixa da casa)
+- Despesas recorrentes (aluguel, luz…) com geração automática mensal idempotente
+- Planos de contribuição mensais (auto-gerados)
+- Fechamento de mês com opção de carregar saldo
+- Acertos de conta (payments) que afetam dashboard
 
-## Pendente (iterações futuras)
-- Gamificação (ranking, badges, níveis)
-- IA (insights, previsão, sugestões)
+## Bugs corrigidos na v3
+- House type com month_start_day (TypeScript strict)
+- Double-fetch no dashboard eliminado
+- android.package + ios.bundleIdentifier para EAS Build
+- Backend migrado para Node.js (limite de apps Hostinger)
+
+## Pendente (futuras iterações)
+- Gamificação (rankings, badges, níveis)
+- IA (insights automáticos, sugestão de divisão)
 - OCR de nota fiscal
 - Modo offline com sync
-- Gráficos avançados
-- Fechamento mensal
+- Gráficos avançados (trends, previsões)
+- Push notifications para alertas
+- Cron job de geração automática de recorrentes

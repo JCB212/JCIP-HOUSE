@@ -30,10 +30,11 @@ export default function Home() {
   const load = useCallback(async () => {
     if (!house) return;
     try {
-      const [mlist, dash] = await Promise.all([
-        api.get<MonthOut[]>(`/houses/${house.id}/months`),
-        api.get<any>(`/houses/${house.id}/dashboard${selectedMonth ? `?month_id=${selectedMonth}` : ""}`),
-      ]);
+      const mlist = await api.get<MonthOut[]>(`/houses/${house.id}/months`);
+      const monthId = selectedMonth || mlist.find((m) => m.status === "open")?.id || mlist[0]?.id;
+      const dash = await api.get<any>(
+        `/houses/${house.id}/dashboard${monthId ? `?month_id=${monthId}` : ""}`
+      );
       setMonths(mlist);
       setData(dash);
       if (!selectedMonth) setSelectedMonth(dash.current_month.id);

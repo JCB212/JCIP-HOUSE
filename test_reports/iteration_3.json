@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 3 (Node.js/Express + MariaDB migration) fully verified. Backend: 24/24 pytest cases PASSED in /app/backend/tests/test_node_backend.py covering AUTH (register/login/me/401-no-token), HOUSES (create accepts month_start_day=5, owner-only PUT /settings 403 for non-owner, join idempotent), MONTHS (GET auto-creates current honoring start_day=5 so start_date ends with -05, close-month then create expense -> 400, reopen restores status=open), EXPENSES (default split=equal when omitted, weight 1/1=150/150 from 300, custom 70/30 ok, custom mismatch->400, individual -> payer-only participant, market items auto-compute amount=40 from 2×15+1×10 and has_items=true, missing amount->400), CONTRIBUTIONS (create linked to month_id), RECURRING CRUD (create/update/list), CONTRIBUTION-PLANS (upsert by user_id — 2× POST for same user returns same id with amount updated to 900), POST /months/current/generate IDEMPOTENT (1st run: created_expenses>=1 & created_contributions>=2 from 2 plans, 2nd run 0/0), DASHBOARD shape (current_month, total_fixed_expenses, total_variable_expenses, carried_balance, members_summary with 2 users, debts, expenses_by_category present, total_fixed_expenses>=1200 from generated recurring), PAYMENTS (POST increments bob.balance by +50 between dashboard calls). Frontend (Expo web, mobile 375×667): register (register-name/email/password-input + register-submit-button) → onboarding (onb-house-name + onb-submit) → dashboard loaded at `/` with NO double-fetch and ALL required testIDs present: home-settings-btn, month-2026-4 (Abr/26 pill rendered), home-add-expense-btn, home-add-contribution-btn, home-generate-recurring-btn, btn-close-month. Cards 'Saldo do mês', 'Contribuído', 'Gasto', FIXAS, VARIÁVEIS all visible with R$ 0,00. New expense modal opens with new-expense-amount, new-expense-desc, new-expense-submit, new-expense-close testIDs + 'Supermercado' category chip rendered with 🛒 emoji. Recorrentes tab renders tab-fixed, tab-plans, recurring-add-btn. No console errors. Month pill visible as 'Abr/26'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_node_backend.py",
+    "/app/test_reports/pytest/iteration3_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.js is 970 lines — still within reasonable single-file scope for a Node/Express app but consider splitting into routers/ (auth, houses, months, expenses, contributions, recurring, dashboard) for maintainability as features grow.",
+    "Dashboard endpoint issues N+1 queries (category lookup inside loops at line 914 and serializeExpense inside recent_expenses); for 10 recent expenses this is fine, but if expense count grows consider single JOIN.",
+    "`api.put /houses/:id/members/weight` does not enforce owner-only — any member can change any other member's weight. Consider adding `if h.owner_id !== req.user.id` check.",
+    "Payments endpoint at line 599 does NOT validate from_user_id/to_user_id belong to the house. Add membership checks.",
+    "computeShares 'weight' branch uses `wmap[uid] || 1` so if weight=0 in DB it silently becomes 1 — consider explicit null check.",
+    "`expense_date` comes from dateStrings=true as 'YYYY-MM-DD' string; month.start_date.slice(0,7) in line 773 works but is fragile if DB driver changes. Prefer using Date.toISOString()."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_node_backend.py (new — 24 tests, all passing)",
+    "/app/test_reports/iteration_3.json",
+    "/app/test_reports/pytest/iteration3_results.xml"
+  ],
+  "success_rate": {"backend": "100% (24/24)", "frontend": "100% of iteration-3 testIDs present & reachable on mobile 375×667"},
+  "seed_data_creation": "Per-module Alice/Bob users (TEST_alice_<suf>@test.com, TEST_bob_<suf>@test.com) + one house (TEST_Casa_<suf>) with month_start_day=5. Frontend run created uiit3b_<suf>@test.com + 'Casa Ui It3b <suf>'. DB auto-reset each iteration per migrations.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Node.js migration is solid. Run `pytest /app/backend/tests/test_node_backend.py -v` to regression test. BASE_URL comes from EXPO_PUBLIC_BACKEND_URL env. Frontend testIDs confirmed: login-goto-register, register-{name,email,password}-input, register-submit-button, onb-{tab-create,tab-join,house-name,submit}, home-{settings,add-expense,add-contribution,generate-recurring}-btn, btn-close-month, month-<Y>-<M>, new-expense-{amount,desc,submit,close}, tab-fixed, tab-plans, recurring-add-btn. Modal inside Recorrentes (save-recurring/save-plan) was not opened in this run but was verified in iteration 2. Supermercado chip has 🛒 emoji prefix, so exact text-match fails — use partial or data-testid for category chip (none present today; consider adding category-chip-<name> testID for future E2E).",
+  "rca_of_issue": "No blocking bugs. All 24 backend endpoints and all dashboard/new-expense/recurring frontend testIDs verified. Migration from Python/FastAPI to Node.js/Express preserves API contract; MariaDB dateStrings=true handled correctly (start_date arrives as 'YYYY-MM-DD')."
+}

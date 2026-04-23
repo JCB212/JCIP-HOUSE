@@ -1,143 +1,173 @@
-# 📦 JCIP House Finance - Guia de Build do APK Android
+# 🏡 JCIP House Finance — Guia Completo de Deploy (Hostinger)
 
-Este documento explica como você mesmo pode gerar o arquivo `.apk` do JCIP House Finance para instalar no seu celular Android (fora do Emergent/Expo Go).
+## 📦 O que você tem pronto
+
+### 1. Backend (Node.js + Express + MySQL)
+- **Pasta**: `/app/backend-node/`
+- Stack: Express 4, mysql2, bcryptjs, jsonwebtoken
+- **Única aplicação Node.js** — atende ao limite de apps da Hostinger
+- Endpoint base: `/api/*` (todos os endpoints)
+
+### 2. Frontend (React Native / Expo)
+- **Pasta**: `/app/frontend/`
+- Expo SDK 54, Expo Router
+- Gera **APK nativo** Android via EAS Build (grátis)
+
+### 3. Banco de dados SQL
+- **Arquivo**: `/app/database.sql` — 13 tabelas prontas para importar
 
 ---
 
-## 🧾 Pré-requisitos
+## 🚀 Passo-a-passo na Hostinger
 
-1. **Conta Expo (gratuita)** — https://expo.dev/signup
-2. **Node.js 20+** instalado na sua máquina
-3. **Git** instalado
-4. Acesso ao código-fonte (faça "Save to GitHub" pelo Emergent)
+### PASSO 1 — Criar banco MySQL na Hostinger
 
----
+1. Entre no **hPanel** → **Bancos de dados MySQL**
+2. Clique em **Criar novo banco**
+3. Escolha um nome (ex.: `u123456789_jcip`) + usuário + senha forte
+4. **Guarde** essas 4 informações:
+   - Host (ex.: `mysql.hostinger.com` ou IP)
+   - Nome do banco
+   - Usuário
+   - Senha
+5. Habilite **"Acesso remoto MySQL"** e adicione o IP do servidor onde seu backend rodará (`%` libera tudo — ou o IP específico do Node App)
 
-## 🚀 Opção 1 — EAS Build na nuvem (RECOMENDADO)
+### PASSO 2 — Importar o schema
 
-### Passo 1 — Clonar o repo
+1. Abra o **phpMyAdmin** (hPanel → Bancos de Dados → phpMyAdmin)
+2. Selecione o banco criado
+3. Aba **Importar** → selecione `database.sql` → **Executar**
+4. Você verá as 13 tabelas criadas
+
+### PASSO 3 — Deploy do Backend Node.js (Hostinger)
+
+A Hostinger oferece **"Aplicativos Node.js"** (em planos Business+). Se o seu plano não tiver, use um VPS Hostinger (mais completo).
+
+#### Opção A — Hostinger Business/Cloud (Node.js App)
+
+1. hPanel → **Avançado** → **Node.js**
+2. **Criar aplicativo**:
+   - Versão Node.js: **20.x**
+   - Modo: `Production`
+   - Raiz do aplicativo: `public_html/jcip-backend` (ou similar)
+   - URL: seu domínio ou subdomínio (ex.: `api.seudominio.com`)
+   - Arquivo de entrada: `server.js`
+3. Faça upload dos arquivos da pasta `/app/backend-node/` (via File Manager ou FTP):
+   - `server.js`
+   - `db.js`
+   - `migrations.js`
+   - `utils.js`
+   - `package.json`
+   - `.env` (ajustado — veja abaixo)
+4. No painel Node.js: clique **Executar NPM Install**
+5. Configure o `.env`:
+
+```
+DB_HOST=mysql.hostinger.com
+DB_PORT=3306
+DB_USER=u123456789_jcip
+DB_PASSWORD=sua_senha_forte
+DB_NAME=u123456789_jcip
+
+JWT_SECRET=coloque-uma-string-longa-e-aleatoria-aqui
+JWT_EXPIRE_DAYS=30
+
+PORT=8001
+```
+
+6. Clique **Iniciar aplicação**
+7. Teste: abrir `https://api.seudominio.com/api/` → deve retornar JSON `{"message":"JCIP House Finance API (Node.js)","status":"online"}`
+
+#### Opção B — VPS Hostinger (se preferir)
 
 ```bash
-git clone <seu-repo-github>
-cd <seu-repo>/frontend
+ssh root@seu-vps
+apt install -y nodejs npm
+git clone <seu-repo>  # ou envie via SCP
+cd backend-node
+npm install
+# configure .env como acima
+# Use pm2 para manter rodando:
+npm install -g pm2
+pm2 start server.js --name jcip-api
+pm2 save
+pm2 startup
+```
+
+### PASSO 4 — Build do APK Android
+
+1. No seu computador:
+
+```bash
+git clone <seu-repo>
+cd frontend
 yarn install
-```
-
-### Passo 2 — Instalar o CLI do EAS
-
-```bash
 npm install -g eas-cli
-eas login     # entre com sua conta Expo
+eas login
 ```
 
-### Passo 3 — Configurar o projeto
+2. Edite `/frontend/.env`:
 
-Dentro de `/frontend`:
-
-```bash
-eas build:configure
+```
+EXPO_PUBLIC_BACKEND_URL=https://api.seudominio.com
 ```
 
-Isso criará um arquivo `eas.json`. Substitua pelo conteúdo abaixo para gerar
-um APK direto (não um AAB):
+3. Crie `/frontend/eas.json`:
 
 ```json
 {
   "cli": { "version": ">= 10.0.0" },
   "build": {
     "production": {
-      "android": {
-        "buildType": "apk"
-      }
-    },
-    "preview": {
-      "distribution": "internal",
       "android": { "buildType": "apk" }
     }
-  },
-  "submit": { "production": {} }
+  }
 }
 ```
 
-### Passo 4 — Apontar a API para seu servidor de produção
-
-Edite `/frontend/.env` e defina:
-
-```
-EXPO_PUBLIC_BACKEND_URL=https://seu-backend.com
-```
-
-> Esse deve ser o endereço onde você vai hospedar o backend FastAPI
-> (ex.: Hostinger VPS, Railway, Render, DigitalOcean, etc.) e que se conecta
-> ao seu MySQL da Hostinger.
-
-### Passo 5 — Gerar o APK
+4. Gere o APK:
 
 ```bash
-eas build --profile preview --platform android
+eas build --profile production --platform android
 ```
 
-- O Expo vai compilar na nuvem (leva 10-15 min).
-- Quando terminar, você recebe um link para baixar o `.apk`.
-- Instale no celular (pode precisar habilitar "Fontes desconhecidas").
+5. Ao terminar (~10-15 min), o Expo retorna um link → baixe o `.apk` → instale no Android (habilite "Fontes desconhecidas")
 
 ---
 
-## 🏗️ Opção 2 — Build local (avançado)
+## ✅ Checklist de verificação
 
-Requer Android Studio + JDK 17 + Android SDK instalados.
-
-```bash
-cd frontend
-npx expo prebuild --platform android
-cd android
-./gradlew assembleRelease
-```
-
-O APK fica em `frontend/android/app/build/outputs/apk/release/app-release.apk`
+- [ ] Banco criado na Hostinger + schema importado
+- [ ] Acesso remoto MySQL liberado
+- [ ] Backend Node.js rodando em `https://api.seudominio.com`
+- [ ] `/api/` retorna JSON de status
+- [ ] `EXPO_PUBLIC_BACKEND_URL` apontando pro backend
+- [ ] APK gerado via EAS Build
+- [ ] APK instalado e funcional no Android
 
 ---
 
-## 🔧 Hospedagem do Backend (FastAPI + MySQL Hostinger)
+## ❓ Troubleshooting
 
-O APK só é útil se o backend estiver rodando num servidor público. Opções:
-
-### Rápida: Railway / Render
-1. Conecte seu GitHub
-2. Aponte para a pasta `/backend`
-3. Adicione as variáveis de ambiente:
-   ```
-   MYSQL_URL=mysql+pymysql://USUARIO:SENHA@HOST_HOSTINGER:3306/NOMEDB?charset=utf8mb4
-   JWT_SECRET=uma-string-longa-e-secreta
-   JWT_ALGORITHM=HS256
-   JWT_EXPIRE_DAYS=30
-   ```
-4. Comando de start:
-   ```
-   uvicorn server:app --host 0.0.0.0 --port $PORT
-   ```
-
-### VPS Hostinger
-```bash
-ssh usuario@seu-vps
-git clone <seu-repo>
-cd <seu-repo>/backend
-pip install -r requirements.txt
-# Edite o .env como acima
-uvicorn server:app --host 0.0.0.0 --port 8001
-# (use systemd ou pm2 para manter rodando)
-```
-
-### Banco de dados
-Importe o arquivo `/app/database.sql` no phpMyAdmin da Hostinger.
+- **Backend retorna 500 de banco**: confira `.env` do backend, especialmente `DB_HOST`. Alguns hosts exigem o IP/hostname específico mostrado no hPanel.
+- **APK não conecta**: Android 9+ exige HTTPS. Certifique-se de que o domínio tem SSL (Let's Encrypt grátis via Hostinger).
+- **CORS**: o backend já está com CORS `*` por padrão. Se quiser restringir, edite em `server.js` → `app.use(cors(...))`.
+- **Mês não abre automaticamente**: o endpoint `/api/houses/:id/months` cria o mês atual na hora que é chamado. Basta abrir o dashboard.
 
 ---
 
-## ❓ Problemas comuns
+## 💡 Manutenção
 
-- **App não conecta ao backend**: verifique se `EXPO_PUBLIC_BACKEND_URL` aponta
-  para um HTTPS válido (Android 9+ bloqueia HTTP puro).
-- **MySQL Hostinger não aceita conexão remota**: ative a opção "acesso remoto"
-  no hPanel e libere o IP do servidor onde o backend está hospedado.
-- **Build do EAS falha**: confira que `app.json` tem os campos `android.package`
-  e `ios.bundleIdentifier` preenchidos (ex.: `com.seunome.jcip`).
+### Atualizar backend
+```
+# SSH ou File Manager
+git pull
+cd backend-node && npm install
+# No painel Node.js: Restart App
+```
+
+### Backup do banco
+Hostinger faz backup automático. Para manual: phpMyAdmin → Exportar → formato SQL.
+
+### Adicionar novas features
+O projeto é modular. Futuras features sugeridas: OCR, IA, gamificação, gráficos, fechamento automático agendado via cron.

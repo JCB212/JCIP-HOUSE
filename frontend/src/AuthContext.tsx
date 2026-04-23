@@ -19,6 +19,7 @@ export type House = {
   currency: string;
   owner_id: string;
   gamification_enabled: boolean;
+  month_start_day: number;
   members: Member[];
 };
 

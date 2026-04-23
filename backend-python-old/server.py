@@ -500,12 +500,12 @@ def create_recurring(house_id: str, p: RecurringIn,
     ensure_member(db, house_id, p.payer_id)
     r = RecurringExpense(house_id=house_id, **p.model_dump())
     db.add(r); db.commit(); db.refresh(r)
-    return list_recurring.__wrapped__(house_id, current, db)[-1] if False else RecurringOut(
+    cat = db.query(Category).filter(Category.id == r.category_id).first() if r.category_id else None
+    payer = db.query(User).filter(User.id == r.payer_id).first()
+    return RecurringOut(
         id=r.id, name=r.name, amount=r.amount, category_id=r.category_id,
-        category_name=(db.query(Category).filter(Category.id == r.category_id).first().name
-                        if r.category_id else None),
-        payer_id=r.payer_id,
-        payer_name=db.query(User).filter(User.id == r.payer_id).first().name,
+        category_name=cat.name if cat else None,
+        payer_id=r.payer_id, payer_name=payer.name if payer else "",
         frequency=r.frequency, day_of_month=r.day_of_month,
         expense_type=r.expense_type, split_type=r.split_type,
         is_active=r.is_active, last_generated_month=r.last_generated_month,
@@ -592,6 +592,7 @@ def generate_current_month(house_id: str,
 
     created_expenses = 0
     created_contribs = 0
+    skipped_non_monthly = 0
 
     # Recurring expenses
     recs = db.query(RecurringExpense).filter(
@@ -600,7 +601,8 @@ def generate_current_month(house_id: str,
     ).all()
     for r in recs:
         if r.frequency != "monthly":
-            continue  # weekly/yearly: keep simple for v1
+            skipped_non_monthly += 1
+            continue
         if r.last_generated_month == tag:
             continue
         target_day = max(1, min(r.day_of_month or month.start_date.day, 28))
@@ -649,7 +651,9 @@ def generate_current_month(house_id: str,
 
     db.commit()
     return {"ok": True, "created_expenses": created_expenses,
-            "created_contributions": created_contribs, "month_id": month.id}
+            "created_contributions": created_contribs,
+            "skipped_non_monthly": skipped_non_monthly,
+            "month_id": month.id}
 
 
 # ===== DASHBOARD =====
