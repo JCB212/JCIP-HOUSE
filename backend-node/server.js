@@ -347,6 +347,10 @@ api.put("/houses/:id/settings", auth, wrap(async (req, res) => {
 
 api.put("/houses/:id/members/weight", auth, wrap(async (req, res) => {
   await ensureMember(req.params.id, req.user.id);
+  const ownerRow = await one("SELECT owner_id FROM houses WHERE id=?", [req.params.id]);
+  if (!ownerRow || ownerRow.owner_id !== req.user.id) {
+    return res.status(403).json({ detail: "Apenas o dono pode alterar pesos" });
+  }
   const { user_id, weight } = req.body || {};
   const m = await one("SELECT id FROM house_members WHERE house_id=? AND user_id=?",
     [req.params.id, user_id]);
@@ -599,6 +603,8 @@ api.delete("/houses/:id/contributions/:cid", auth, wrap(async (req, res) => {
 api.post("/houses/:id/payments", auth, wrap(async (req, res) => {
   await ensureMember(req.params.id, req.user.id);
   const p = req.body || {};
+  await ensureMember(req.params.id, p.from_user_id);
+  await ensureMember(req.params.id, p.to_user_id);
   const id = uuidv4();
   await query(
     `INSERT INTO payments (id,house_id,from_user_id,to_user_id,amount,note,payment_date,created_at)
