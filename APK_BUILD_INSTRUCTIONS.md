@@ -1,182 +1,153 @@
-# 🏡 JCIP House Finance — Guia Completo de Deploy (Hostinger)
+# JCIP House Finance - Deploy na Hostinger + APK
 
-## 📦 O que você tem pronto
+Este projeto tem tres partes:
 
-### 1. Backend (Node.js + Express + MySQL)
-- **Pasta**: `/app/backend-node/`
-- Stack: Express 4, mysql2, bcryptjs, jsonwebtoken
-- **Única aplicação Node.js** — atende ao limite de apps da Hostinger
-- Endpoint base: `/api/*` (todos os endpoints)
+- `frontend`: app mobile em Expo/React Native. Ele vira o APK.
+- `backend-node`: API Node.js/Express. Ela deve rodar na Hostinger.
+- MySQL Hostinger: banco de dados em nuvem.
 
-### 2. Frontend (React Native / Expo)
-- **Pasta**: `/app/frontend/`
-- Expo SDK 54, Expo Router
-- Gera **APK nativo** Android via EAS Build (grátis)
-- O APK é independente da Emergent e usa cache/fila local SQLite para modo offline
+O APK nao deve conectar direto no MySQL. As credenciais do banco ficam somente na API Node.js. O app mobile usa SQLite local para cache/fila offline e sincroniza com a API quando a internet voltar.
 
-### 3. API + Banco de dados SQL
-- **Arquivo**: `/app/database.sql` — 13 tabelas prontas para importar
-- O APK **não deve** conectar direto no MySQL. Publique o backend Node.js na Hostinger e aponte o app para essa API.
+## 1. Criar o banco MySQL na Hostinger
 
----
+1. Abra o hPanel da Hostinger.
+2. Entre em `Websites` > selecione seu site/domínio > `Dashboard`.
+3. No menu lateral, abra `Databases` > `Management` ou `MySQL Databases`.
+4. Crie o banco com estes dados, se forem os mesmos do seu painel:
+   - Database name: `u251982692_jciphouse`
+   - Database username: `u251982692_jciphouse`
+   - Password: a senha criada no hPanel
+5. Guarde tambem o host do banco. Em app Node.js dentro da Hostinger, normalmente sera `localhost`.
 
-## 🚀 Passo-a-passo na Hostinger
+## 2. Importar as tabelas
 
-### PASSO 1 — Criar banco MySQL na Hostinger
+1. No hPanel, abra o `phpMyAdmin` do banco criado.
+2. Selecione o banco `u251982692_jciphouse`.
+3. Clique em `Importar`.
+4. Selecione o arquivo `database_hostinger.sql`.
+5. Execute a importacao.
+6. Ao terminar, o banco deve ter 27 tabelas.
 
-1. Entre no **hPanel** → **Bancos de dados MySQL**
-2. Clique em **Criar novo banco**
-3. Escolha um nome (ex.: `u123456789_jcip`) + usuário + senha forte
-4. **Guarde** essas 4 informações:
-   - Host (ex.: `mysql.hostinger.com` ou IP)
-   - Nome do banco
-   - Usuário
-   - Senha
-5. Habilite **"Acesso remoto MySQL"** e adicione o IP do servidor onde seu backend rodará (`%` libera tudo — ou o IP específico do Node App)
+Use `database_hostinger.sql` para a Hostinger. Ele foi preparado para MySQL/MariaDB e phpMyAdmin.
 
-### PASSO 2 — Importar o schema
+## 3. Publicar a API Node.js pela tela da Hostinger
 
-1. Abra o **phpMyAdmin** (hPanel → Bancos de Dados → phpMyAdmin)
-2. Selecione o banco criado
-3. Aba **Importar** → selecione `database.sql` → **Executar**
-4. Você verá as 13 tabelas criadas
+Na tela `Implante seu web app em Node.js`, escolha `Importar repositorio Git` e clique em `Conecte-se com GitHub`.
 
-### PASSO 3 — Deploy do Backend Node.js (Hostinger)
+1. Autorize a Hostinger no GitHub.
+2. Selecione o repositorio:
+   - `JCB212/JCIP-HOUSE`
+3. Selecione a branch:
+   - `main`
+4. Se a Hostinger mostrar campo de pasta raiz/root directory/application directory, preencha:
+   - `backend-node`
+5. Configure o app:
+   - Framework: `Express.js` se aparecer; se nao aparecer, use `Other`.
+   - Node.js version: `20.x` ou `22.x`.
+   - Entry file: `server.js`.
+   - Install command: `npm install` ou `npm ci`.
+   - Build command: deixe vazio/none, porque a API nao precisa de build.
+   - Start command: `npm start`.
+   - Output directory: deixe vazio.
+6. Clique em `Deploy`.
 
-A Hostinger oferece **"Aplicativos Node.js"** (em planos Business+). Se o seu plano não tiver, use um VPS Hostinger (mais completo).
+Importante: o repositorio e um monorepo, entao o `package.json` da API esta dentro de `backend-node`. Se a Hostinger nao aceitar escolher essa subpasta e acusar `Unsupported framework` ou `invalid project structure`, use uma destas alternativas:
 
-#### Opção A — Hostinger Business/Cloud (Node.js App)
+- Alternativa A: na tela da Hostinger escolha `Faca upload dos arquivos` e envie um `.zip` contendo somente o conteudo da pasta `backend-node`, nao o projeto inteiro.
+- Alternativa B: crie um segundo repositorio so para a API, com o conteudo de `backend-node` na raiz, e importe esse repositorio na Hostinger.
 
-1. hPanel → **Avançado** → **Node.js**
-2. **Criar aplicativo**:
-   - Versão Node.js: **20.x**
-   - Modo: `Production`
-   - Raiz do aplicativo: `public_html/jcip-backend` (ou similar)
-   - URL: seu domínio ou subdomínio (ex.: `api.seudominio.com`)
-   - Arquivo de entrada: `server.js`
-3. Faça upload dos arquivos da pasta `/app/backend-node/` (via File Manager ou FTP):
-   - `server.js`
-   - `db.js`
-   - `migrations.js`
-   - `utils.js`
-   - `package.json`
-   - `.env` (ajustado — veja abaixo)
-4. No painel Node.js: clique **Executar NPM Install**
-5. Configure o `.env`:
+## 4. Configurar variaveis de ambiente
 
-```
+No dashboard do Node.js App na Hostinger, abra `Environment Variables` e cadastre:
+
+```env
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=u251982692_jciphouse
-DB_PASSWORD=sua_senha_do_hpanel
+DB_PASSWORD=COLE_A_SENHA_REAL_DO_HPANEL
 DB_NAME=u251982692_jciphouse
 
-JWT_SECRET=coloque-uma-string-longa-e-aleatoria-aqui
+JWT_SECRET=COLOQUE_UMA_STRING_LONGA_ALEATORIA_AQUI
 JWT_EXPIRE_DAYS=30
-
-PORT=8001
 ```
 
-6. Clique **Iniciar aplicação**
-7. Teste: abrir `https://api.seudominio.com/api/` → deve retornar JSON `{"message":"JCIP House Finance API (Node.js)","status":"online"}`
-8. Teste o banco: abrir `https://api.seudominio.com/api/health` → deve retornar `database: "online"`
+Sobre `PORT`:
 
-#### Opção B — VPS Hostinger (se preferir)
+- Se a Hostinger pedir `App port`, use `8001` e adicione `PORT=8001`.
+- Se a Hostinger ja gerenciar a porta automaticamente, nao cadastre `PORT`; o app aceita `process.env.PORT`.
 
-```bash
-ssh root@seu-vps
-apt install -y nodejs npm
-git clone <seu-repo>  # ou envie via SCP
-cd backend-node
-npm install
-# configure .env como acima
-# Use pm2 para manter rodando:
-npm install -g pm2
-pm2 start server.js --name jcip-api
-pm2 save
-pm2 startup
+Depois de salvar as variaveis, clique em `Restart` ou faca `Redeploy`.
+
+## 5. Testar a API publicada
+
+Troque `api.seudominio.com` pelo dominio ou subdominio configurado na Hostinger.
+
+1. Teste status da API:
+
+```text
+https://api.seudominio.com/api/
 ```
 
-### PASSO 4 — Build do APK Android
+Resposta esperada:
 
-1. No seu computador:
-
-```bash
-git clone <seu-repo>
-cd frontend
-yarn install
-npm install -g eas-cli
-eas login
+```json
+{"message":"JCIP House Finance API (Node.js)","status":"online"}
 ```
 
-2. Edite `/frontend/.env`:
+2. Teste conexao com banco:
 
+```text
+https://api.seudominio.com/api/health
 ```
-EXPO_PUBLIC_BACKEND_URL=https://api.seudominio.com
-```
 
-> Use o domínio da API Node.js, não o host do MySQL. As credenciais do banco ficam somente no backend.
-
-3. Crie `/frontend/eas.json`:
+Resposta esperada:
 
 ```json
 {
-  "cli": { "version": ">= 10.0.0" },
-  "build": {
-    "production": {
-      "android": { "buildType": "apk" }
-    }
-  }
+  "status": "ok",
+  "api": "online",
+  "database": "online",
+  "db_configured": true
 }
 ```
 
-4. Gere o APK:
+## 6. Apontar o APK para a API
+
+No projeto mobile, crie/edite `frontend/.env`:
+
+```env
+EXPO_PUBLIC_BACKEND_URL=https://api.seudominio.com
+```
+
+Nao coloque host, usuario ou senha do MySQL no APK.
+
+Depois gere o APK:
 
 ```bash
-eas build --profile production --platform android
+cd frontend
+yarn install
+npx eas-cli build --profile production --platform android
 ```
 
-5. Ao terminar (~10-15 min), o Expo retorna um link → baixe o `.apk` → instale no Android (habilite "Fontes desconhecidas")
+O arquivo `frontend/eas.json` ja esta configurado para gerar APK Android em `production`.
 
----
+## 7. Checklist final
 
-## ✅ Checklist de verificação
+- Banco MySQL criado.
+- `database_hostinger.sql` importado.
+- Node.js App publicado apontando para `backend-node`.
+- Variaveis de ambiente preenchidas.
+- `/api/` retorna `status: online`.
+- `/api/health` retorna `database: online`.
+- `frontend/.env` aponta para a URL HTTPS da API.
+- APK instalado e testado.
+- Teste offline: depois do primeiro login, crie dados sem internet, reconecte e confirme a sincronizacao.
 
-- [ ] Banco criado na Hostinger + schema importado
-- [ ] Acesso remoto MySQL liberado
-- [ ] Backend Node.js rodando em `https://api.seudominio.com`
-- [ ] `/api/` retorna JSON de status
-- [ ] `EXPO_PUBLIC_BACKEND_URL` apontando pro backend
-- [ ] APK testado sem internet após primeiro login: alterações devem ficar na fila local e sincronizar ao reconectar
-- [ ] APK gerado via EAS Build
-- [ ] APK instalado e funcional no Android
+## 8. Problemas comuns
 
----
-
-## ❓ Troubleshooting
-
-- **Backend retorna 500 de banco**: confira `.env` do backend, especialmente `DB_HOST`. Alguns hosts exigem o IP/hostname específico mostrado no hPanel.
-- **APK não conecta**: Android 9+ exige HTTPS. Certifique-se de que o domínio tem SSL (Let's Encrypt grátis via Hostinger).
-- **CORS**: o backend já está com CORS `*` por padrão. Se quiser restringir, edite em `server.js` → `app.use(cors(...))`.
-- **Mês não abre automaticamente**: o endpoint `/api/houses/:id/months` cria o mês atual na hora que é chamado. Basta abrir o dashboard.
-
----
-
-## 💡 Manutenção
-
-### Atualizar backend
-```
-# SSH ou File Manager
-git pull
-cd backend-node && npm install
-# No painel Node.js: Restart App
-```
-
-### Backup do banco
-Hostinger faz backup automático. Para manual: phpMyAdmin → Exportar → formato SQL.
-
-### Modo offline
-O frontend tem uma camada local em SQLite. Leituras ficam em cache e gravações autenticadas feitas sem internet entram na fila local para sincronizar quando a conexão voltar.
-
-### Adicionar novas features
-O projeto é modular. Futuras features sugeridas: OCR, IA, contas a pagar/receber, push notifications, gráficos, fechamento automático agendado via cron.
+- `Unsupported framework`: a Hostinger nao achou o `package.json`. Use root directory `backend-node` ou envie ZIP somente da pasta `backend-node`.
+- `Access denied for user`: confira `DB_USER`, `DB_PASSWORD`, `DB_NAME` e se o usuario esta vinculado ao banco.
+- `Cannot connect to MySQL server`: use `DB_HOST=localhost` quando API e banco estao na mesma hospedagem Hostinger.
+- `/api/health` falha, mas `/api/` abre: a API subiu, mas o banco esta com variavel errada ou schema ausente.
+- APK nao conecta: use HTTPS e confirme `EXPO_PUBLIC_BACKEND_URL` sem barra no final, por exemplo `https://api.seudominio.com`.
+- Alterou variavel de ambiente: sempre faca `Restart` ou `Redeploy`.
