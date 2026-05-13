@@ -12,9 +12,11 @@
 - **Pasta**: `/app/frontend/`
 - Expo SDK 54, Expo Router
 - Gera **APK nativo** Android via EAS Build (grátis)
+- O APK é independente da Emergent e usa cache/fila local SQLite para modo offline
 
-### 3. Banco de dados SQL
+### 3. API + Banco de dados SQL
 - **Arquivo**: `/app/database.sql` — 13 tabelas prontas para importar
+- O APK **não deve** conectar direto no MySQL. Publique o backend Node.js na Hostinger e aponte o app para essa API.
 
 ---
 
@@ -63,11 +65,11 @@ A Hostinger oferece **"Aplicativos Node.js"** (em planos Business+). Se o seu pl
 5. Configure o `.env`:
 
 ```
-DB_HOST=mysql.hostinger.com
+DB_HOST=localhost
 DB_PORT=3306
-DB_USER=u123456789_jcip
-DB_PASSWORD=sua_senha_forte
-DB_NAME=u123456789_jcip
+DB_USER=u251982692_jciphouse
+DB_PASSWORD=sua_senha_do_hpanel
+DB_NAME=u251982692_jciphouse
 
 JWT_SECRET=coloque-uma-string-longa-e-aleatoria-aqui
 JWT_EXPIRE_DAYS=30
@@ -77,6 +79,7 @@ PORT=8001
 
 6. Clique **Iniciar aplicação**
 7. Teste: abrir `https://api.seudominio.com/api/` → deve retornar JSON `{"message":"JCIP House Finance API (Node.js)","status":"online"}`
+8. Teste o banco: abrir `https://api.seudominio.com/api/health` → deve retornar `database: "online"`
 
 #### Opção B — VPS Hostinger (se preferir)
 
@@ -112,6 +115,8 @@ eas login
 EXPO_PUBLIC_BACKEND_URL=https://api.seudominio.com
 ```
 
+> Use o domínio da API Node.js, não o host do MySQL. As credenciais do banco ficam somente no backend.
+
 3. Crie `/frontend/eas.json`:
 
 ```json
@@ -142,6 +147,7 @@ eas build --profile production --platform android
 - [ ] Backend Node.js rodando em `https://api.seudominio.com`
 - [ ] `/api/` retorna JSON de status
 - [ ] `EXPO_PUBLIC_BACKEND_URL` apontando pro backend
+- [ ] APK testado sem internet após primeiro login: alterações devem ficar na fila local e sincronizar ao reconectar
 - [ ] APK gerado via EAS Build
 - [ ] APK instalado e funcional no Android
 
@@ -169,5 +175,8 @@ cd backend-node && npm install
 ### Backup do banco
 Hostinger faz backup automático. Para manual: phpMyAdmin → Exportar → formato SQL.
 
+### Modo offline
+O frontend tem uma camada local em SQLite. Leituras ficam em cache e gravações autenticadas feitas sem internet entram na fila local para sincronizar quando a conexão voltar.
+
 ### Adicionar novas features
-O projeto é modular. Futuras features sugeridas: OCR, IA, gamificação, gráficos, fechamento automático agendado via cron.
+O projeto é modular. Futuras features sugeridas: OCR, IA, contas a pagar/receber, push notifications, gráficos, fechamento automático agendado via cron.

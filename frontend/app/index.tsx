@@ -17,7 +17,7 @@ export default function Index() {
     } else {
       router.replace("/(tabs)");
     }
-  }, [user, house, loading]);
+  }, [user, house, loading, router]);
 
   return (
     <View style={styles.c}>

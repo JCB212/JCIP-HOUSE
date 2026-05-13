@@ -74,7 +74,7 @@
     "images": [
       {
         "category": "onboarding_illustration",
-        "url": "https://static.prod-images.emergentagent.com/jobs/6280e3a6-4c01-4362-a586-46ca5b5c5b81/images/eb037168708d13b8bf22f54052c51dca5388990758a530a754ea290131728ce6.png",
+        "url": "frontend/assets/images/app-image.png",
         "description": "3D illustration of a house with floating coins for the welcome/onboarding screen."
       },
       {

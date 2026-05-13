@@ -104,7 +104,7 @@ export default function Settings() {
               editable={house.owner_id === user?.id}
             />
             <Text style={styles.hint}>
-              Define quando começa um novo "mês financeiro". Ex.: dia 5 = mês vai do dia 5 ao dia 5 seguinte.
+              Define quando começa um novo ciclo financeiro. Ex.: dia 5 = mês vai do dia 5 ao dia 5 seguinte.
             </Text>
 
             {house.owner_id === user?.id && (

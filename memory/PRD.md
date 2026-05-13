@@ -5,12 +5,14 @@
 - **Frontend**: React Native / Expo SDK 54 (Expo Router)
 - **Banco**: MySQL 8 / MariaDB 10.11 (Hostinger compatível)
 - **Auth**: JWT (email + senha, bcrypt)
+- **Offline local**: SQLite no APK para cache e fila de sincronização
 
 ## Arquivos principais
 - `/app/backend-node/` — único app Node.js para deploy Hostinger
 - `/app/frontend/` — app Expo (gera APK via EAS Build)
 - `/app/database.sql` — 13 tabelas prontas pra importar no phpMyAdmin
 - `/app/APK_BUILD_INSTRUCTIONS.md` — guia completo passo-a-passo
+- `/app/OFFLINE_SYNC_ARCHITECTURE.md` — arquitetura offline-first para APK independente
 
 ## Funcionalidades
 - Auth JWT (register, login, /me)
@@ -34,6 +36,8 @@
 - Planos de contribuição mensais (auto-gerados)
 - Fechamento de mês com opção de carregar saldo
 - Acertos de conta (payments) que afetam dashboard
+- APK independente da Emergent, configurável via `EXPO_PUBLIC_BACKEND_URL`
+- Cache local de respostas e fila local de mutações para sincronizar quando a internet voltar
 
 ## Bugs corrigidos na v3
 - House type com month_start_day (TypeScript strict)
@@ -45,7 +49,7 @@
 - Gamificação (rankings, badges, níveis)
 - IA (insights automáticos, sugestão de divisão)
 - OCR de nota fiscal
-- Modo offline com sync
+- Local-first completo por entidade (dashboard refletir lançamentos offline imediatamente)
 - Gráficos avançados (trends, previsões)
 - Push notifications para alertas
 - Cron job de geração automática de recorrentes

@@ -9,7 +9,7 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api";
 import { useAuth } from "../../src/AuthContext";
@@ -25,7 +25,6 @@ type Debt = {
 
 export default function Debts() {
   const { house, user } = useAuth();
-  const router = useRouter();
   const [debts, setDebts] = useState<Debt[]>([]);
   const [loading, setLoading] = useState(false);
 

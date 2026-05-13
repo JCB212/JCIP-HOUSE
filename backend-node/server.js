@@ -215,6 +215,19 @@ async function serializeExpense(e) {
 
 api.get("/", (_req, res) => res.json({ message: "JCIP House Finance API (Node.js)", status: "online" }));
 
+api.get("/health", wrap(async (_req, res) => {
+  const startedAt = Date.now();
+  await one("SELECT 1 AS ok");
+  res.json({
+    status: "ok",
+    api: "online",
+    database: "online",
+    db_configured: !!process.env.DB_NAME,
+    latency_ms: Date.now() - startedAt,
+    timestamp: nowUtc(),
+  });
+}));
+
 // AUTH
 api.post("/auth/register", wrap(async (req, res) => {
   const { email, name, password } = req.body || {};
