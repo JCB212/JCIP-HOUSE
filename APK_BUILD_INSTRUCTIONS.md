@@ -17,7 +17,7 @@ O APK nao deve conectar direto no MySQL. As credenciais do banco ficam somente n
    - Database name: `u251982692_jciphouse`
    - Database username: `u251982692_jciphouse`
    - Password: a senha criada no hPanel
-5. Guarde tambem o host do banco. Em app Node.js dentro da Hostinger, normalmente sera `localhost`.
+5. Guarde tambem o host do banco. Em app Node.js dentro da Hostinger, use primeiro `127.0.0.1`.
 
 ## 2. Importar as tabelas
 
@@ -61,7 +61,7 @@ Importante: o repositorio e um monorepo, entao o `package.json` da API esta dent
 No dashboard do Node.js App na Hostinger, abra `Environment Variables` e cadastre:
 
 ```env
-DB_HOST=localhost
+DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_USER=u251982692_jciphouse
 DB_PASSWORD=COLE_A_SENHA_REAL_DO_HPANEL
@@ -147,7 +147,8 @@ O arquivo `frontend/eas.json` ja esta configurado para gerar APK Android em `pro
 
 - `Unsupported framework`: a Hostinger nao achou o `package.json`. Use root directory `backend-node` ou envie ZIP somente da pasta `backend-node`.
 - `Access denied for user`: confira `DB_USER`, `DB_PASSWORD`, `DB_NAME` e se o usuario esta vinculado ao banco.
-- `Cannot connect to MySQL server`: use `DB_HOST=localhost` quando API e banco estao na mesma hospedagem Hostinger.
+- `Access denied for user ... @::1`: troque `DB_HOST=localhost` por `DB_HOST=127.0.0.1` e reinicie o app.
+- `Cannot connect to MySQL server`: confirme o host do banco no hPanel. Quando API e banco estao na mesma hospedagem Hostinger, tente `127.0.0.1` primeiro.
 - `/api/health` falha, mas `/api/` abre: a API subiu, mas o banco esta com variavel errada ou schema ausente.
 - APK nao conecta: use HTTPS e confirme `EXPO_PUBLIC_BACKEND_URL` sem barra no final, por exemplo `https://api.seudominio.com`.
 - Alterou variavel de ambiente: sempre faca `Restart` ou `Redeploy`.
