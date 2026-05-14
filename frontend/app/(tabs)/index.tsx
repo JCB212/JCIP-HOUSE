@@ -8,7 +8,8 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api";
 import { useAuth } from "../../src/AuthContext";
-import { colors, formatBRL, radius, spacing } from "../../src/theme";
+import { formatBRL, radius, spacing } from "../../src/theme";
+import { useAppTheme } from "../../src/ThemeContext";
 
 type MonthOut = {
   id: string; year: number; month_number: number; status: string;
@@ -19,6 +20,8 @@ const MONTH_NAMES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out"
 
 export default function Home() {
   const { house, user } = useAuth();
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const router = useRouter();
   const [data, setData] = useState<any>(null);
   const [months, setMonths] = useState<MonthOut[]>([]);
@@ -128,7 +131,7 @@ export default function Home() {
                 <Text style={[styles.monthChipTxt, sel && styles.monthChipTxtActive]}>
                   {MONTH_NAMES[m.month_number - 1]}/{String(m.year).slice(2)}
                 </Text>
-                {m.status === "closed" && <Ionicons name="lock-closed" size={10} color={sel ? "#fff" : colors.debt} />}
+                {m.status === "closed" && <Ionicons name="lock-closed" size={10} color={sel ? colors.primaryText : colors.debt} />}
               </TouchableOpacity>
             );
           })}
@@ -140,7 +143,7 @@ export default function Home() {
             <Text style={styles.balanceLabel}>Saldo do mês</Text>
             {isClosed && (
               <View style={styles.closedBadge}>
-                <Ionicons name="lock-closed" size={10} color="#fff" />
+                <Ionicons name="lock-closed" size={10} color={colors.primaryText} />
                 <Text style={styles.closedBadgeTxt}>FECHADO</Text>
               </View>
             )}
@@ -189,21 +192,21 @@ export default function Home() {
             style={[styles.actionBtn, { backgroundColor: colors.primary }, isClosed && { opacity: 0.4 }]}
             disabled={isClosed}
             onPress={() => router.push("/expense/new")}>
-            <Ionicons name="add" size={18} color="#fff" />
+            <Ionicons name="add" size={18} color={colors.primaryText} />
             <Text style={styles.actionText}>Gasto</Text>
           </TouchableOpacity>
           <TouchableOpacity testID="home-add-contribution-btn"
             style={[styles.actionBtn, { backgroundColor: colors.positive }, isClosed && { opacity: 0.4 }]}
             disabled={isClosed}
             onPress={() => router.push("/contribution/new")}>
-            <Ionicons name="cash" size={18} color="#fff" />
+            <Ionicons name="cash" size={18} color={colors.primaryText} />
             <Text style={styles.actionText}>Contrib.</Text>
           </TouchableOpacity>
           <TouchableOpacity testID="home-generate-recurring-btn"
             style={[styles.actionBtn, { backgroundColor: colors.neutral }]}
             disabled={generating}
             onPress={generateRecurring}>
-            {generating ? <ActivityIndicator color="#fff" size="small"/> : <Ionicons name="repeat" size={18} color="#fff" />}
+            {generating ? <ActivityIndicator color={colors.primaryText} size="small"/> : <Ionicons name="repeat" size={18} color={colors.primaryText} />}
             <Text style={styles.actionText}>Gerar fixas</Text>
           </TouchableOpacity>
         </View>
@@ -214,6 +217,31 @@ export default function Home() {
             <Text style={styles.closeMonthTxt}>Fechar mês</Text>
           </TouchableOpacity>
         )}
+
+        <View style={styles.quickRow}>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/statement")}>
+            <Ionicons name="analytics-outline" size={18} color={colors.neutral} />
+            <Text style={styles.quickText}>Extrato</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/bills")}>
+            <Ionicons name="wallet-outline" size={18} color={colors.debt} />
+            <Text style={styles.quickText}>Contas</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.quickRow}>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/shopping-list")}>
+            <Ionicons name="cart-outline" size={18} color={colors.positive} />
+            <Text style={styles.quickText}>Compras</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/chores" as any)}>
+            <Ionicons name="checkbox-outline" size={18} color={colors.neutral} />
+            <Text style={styles.quickText}>Afazeres</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/help")}>
+            <Ionicons name="help-circle-outline" size={18} color={colors.textSecondary} />
+            <Text style={styles.quickText}>Ajuda</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Debts */}
         {(data?.debts?.length || 0) > 0 && (
@@ -307,7 +335,7 @@ export default function Home() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.bg },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   hello: { color: colors.textSecondary, fontSize: 14 },
@@ -348,6 +376,19 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm, paddingVertical: 10, borderRadius: radius.lg, borderWidth: 1,
     borderColor: colors.border, borderStyle: "dashed" },
   closeMonthTxt: { color: colors.debt, fontWeight: "700", fontSize: 13 },
+  quickRow: { flexDirection: "row", gap: 8, marginTop: spacing.md },
+  quickBtn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  quickText: { color: colors.textPrimary, fontWeight: "700", fontSize: 12 },
 
   section: { marginTop: spacing.xl },
   sectionTitle: { fontSize: 14, fontWeight: "700", color: colors.textPrimary, marginBottom: spacing.sm },

@@ -1,17 +1,20 @@
 import { useState } from "react";
 import {
   View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, Alert,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Switch,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../src/api";
 import { useAuth } from "../src/AuthContext";
-import { colors, radius, spacing } from "../src/theme";
+import { radius, spacing } from "../src/theme";
+import { useAppTheme } from "../src/ThemeContext";
 
 export default function Settings() {
-  const { house, user, refreshHouses, setHouse } = useAuth();
+  const { house, user, refreshHouses, setHouse, updateUserName } = useAuth();
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const router = useRouter();
   const [weights, setWeights] = useState<Record<string, string>>(() => {
     const w: Record<string, string> = {};
@@ -20,6 +23,7 @@ export default function Settings() {
   });
   const [startDay, setStartDay] = useState(String(house?.month_start_day || 1));
   const [houseName, setHouseName] = useState(house?.name || "");
+  const [displayName, setDisplayName] = useState(user?.name || "");
 
   async function saveWeight(userId: string) {
     const v = parseFloat((weights[userId] || "1").replace(",", ".")) || 1;
@@ -49,6 +53,24 @@ export default function Settings() {
     }
   }
 
+  async function saveProfile() {
+    try {
+      await updateUserName(displayName.trim());
+      Alert.alert("Pronto", "Seu nome foi atualizado.");
+    } catch (e: any) {
+      Alert.alert("Erro", e.message);
+    }
+  }
+
+  async function savePermissions(userId: string, permissions: Record<string, boolean>) {
+    try {
+      const updated = await api.put(`/houses/${house!.id}/members/${userId}/permissions`, { permissions });
+      setHouse(updated as any);
+    } catch (e: any) {
+      Alert.alert("Erro", e.message);
+    }
+  }
+
   async function remove(userId: string) {
     Alert.alert("Remover membro", "Essa ação não pode ser desfeita.", [
       { text: "Cancelar", style: "cancel" },
@@ -71,6 +93,9 @@ export default function Settings() {
 
   if (!house) return null;
   const isOwner = house.owner_id === user?.id;
+  const currentMember = house.members.find((m) => m.user_id === user?.id);
+  const canManageSettings = isOwner || currentMember?.permissions?.manage_settings === true;
+  const canManageMembers = isOwner || currentMember?.permissions?.manage_members === true;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top"]}>
@@ -83,6 +108,21 @@ export default function Settings() {
           <View style={{ width: 26 }} />
         </View>
         <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 120 }}>
+          <Text style={styles.section}>Perfil</Text>
+          <View style={styles.card}>
+            <Text style={styles.label}>Seu nome</Text>
+            <TextInput
+              style={styles.textInput}
+              value={displayName}
+              onChangeText={setDisplayName}
+              placeholder="Nome para exibição"
+              placeholderTextColor={colors.textMuted}
+            />
+            <TouchableOpacity style={styles.saveBtn} onPress={saveProfile}>
+              <Text style={styles.saveBtnTxt}>Salvar nome</Text>
+            </TouchableOpacity>
+          </View>
+
           <Text style={styles.section}>Casa</Text>
           <View style={styles.card}>
             <Text style={styles.label}>Nome</Text>
@@ -91,7 +131,7 @@ export default function Settings() {
               style={styles.textInput}
               value={houseName}
               onChangeText={setHouseName}
-              editable={house.owner_id === user?.id}
+              editable={canManageSettings}
             />
 
             <Text style={[styles.label, { marginTop: spacing.md }]}>Dia de início do mês (1-28)</Text>
@@ -101,13 +141,13 @@ export default function Settings() {
               value={startDay}
               onChangeText={setStartDay}
               keyboardType="number-pad"
-              editable={house.owner_id === user?.id}
+              editable={canManageSettings}
             />
             <Text style={styles.hint}>
               Define quando começa um novo ciclo financeiro. Ex.: dia 5 = mês vai do dia 5 ao dia 5 seguinte.
             </Text>
 
-            {house.owner_id === user?.id && (
+            {canManageSettings && (
               <TouchableOpacity testID="save-house-settings" style={styles.saveBtn} onPress={saveHouseSettings}>
                 <Text style={styles.saveBtnTxt}>Salvar casa</Text>
               </TouchableOpacity>
@@ -134,21 +174,60 @@ export default function Settings() {
                 value={weights[m.user_id] || ""}
                 onChangeText={(v) => setWeights({ ...weights, [m.user_id]: v })}
                 onEndEditing={() => saveWeight(m.user_id)}
+                editable={canManageMembers}
               />
-              {isOwner && m.user_id !== house.owner_id && (
+              {canManageMembers && m.user_id !== house.owner_id && (
                 <TouchableOpacity onPress={() => remove(m.user_id)} style={styles.removeBtn}>
                   <Ionicons name="trash-outline" size={18} color={colors.debt} />
                 </TouchableOpacity>
               )}
             </View>
           ))}
+
+          {canManageMembers && (
+            <>
+              <Text style={styles.section}>Permissões de acesso</Text>
+              <Text style={styles.hint}>
+                O dono sempre tem acesso total. Para criar um sub-dono, habilite gerenciar moradores, configurações e afazeres.
+              </Text>
+              {house.members.filter((m) => m.user_id !== house.owner_id).map((m) => (
+                <View key={`perm-${m.user_id}`} style={styles.permissionsCard}>
+                  <View style={styles.permissionHeader}>
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarTxt}>{m.name[0]?.toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.memberName}>{m.name}</Text>
+                      <Text style={styles.memberSub}>{m.email}</Text>
+                    </View>
+                  </View>
+                  {Object.entries(house.permissions_catalog || {}).map(([key, label]) => {
+                    const enabled = m.permissions?.[key] === true;
+                    return (
+                      <View key={key} style={styles.permissionRow}>
+                        <Text style={styles.permissionLabel}>{label}</Text>
+                        <Switch
+                          value={enabled}
+                          onValueChange={(value) =>
+                            savePermissions(m.user_id, { ...(m.permissions || {}), [key]: value })
+                          }
+                          trackColor={{ false: colors.border, true: colors.neutralBg }}
+                          thumbColor={enabled ? colors.neutral : colors.textMuted}
+                        />
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
+            </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -216,4 +295,22 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   removeBtn: { marginLeft: spacing.sm, padding: 8 },
+  permissionsCard: {
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginTop: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  permissionHeader: { flexDirection: "row", alignItems: "center", marginBottom: spacing.sm },
+  permissionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  permissionLabel: { flex: 1, color: colors.textPrimary, fontWeight: "600", paddingRight: spacing.md },
 });

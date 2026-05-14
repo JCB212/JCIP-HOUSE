@@ -13,7 +13,8 @@ import { useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api";
 import { useAuth } from "../../src/AuthContext";
-import { colors, formatBRL, radius, spacing } from "../../src/theme";
+import { formatBRL, radius, spacing } from "../../src/theme";
+import { useAppTheme } from "../../src/ThemeContext";
 
 type Debt = {
   from_user_id: string;
@@ -25,6 +26,8 @@ type Debt = {
 
 export default function Debts() {
   const { house, user } = useAuth();
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -146,7 +149,7 @@ export default function Debts() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   header: { padding: spacing.lg },
   title: { fontSize: 24, fontWeight: "800", color: colors.textPrimary },
   infoCard: {

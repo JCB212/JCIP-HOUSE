@@ -1,50 +1,39 @@
-# Welcome to your Expo app 👋
+# JCIP House
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Aplicativo mobile de organização financeira pessoal e da casa, com dashboard mensal, divisão de despesas, contribuições, contas a pagar/receber, lista de compras, afazeres, permissões por morador, modo claro/escuro e sincronização com a API Node.js.
 
-## Get started
+## Como rodar
 
-1. Install dependencies
+1. Instale as dependências:
 
    ```bash
-   npm install
+   yarn install
    ```
 
-2. Start the app
+2. Configure a API:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Defina `EXPO_PUBLIC_BACKEND_URL` com a URL do backend publicado na Hostinger.
+
+3. Inicie o app:
 
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+## Build Android
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+O APK é gerado a partir deste diretório com:
 
 ```bash
-npm run reset-project
+npx expo prebuild --platform android --clean
+cd android
+gradlew.bat assembleRelease
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Segurança
 
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Senhas e credenciais ficam em variáveis de ambiente. Não coloque `.env`, senha SMTP, token JWT ou credenciais do banco no GitHub ou dentro do APK.

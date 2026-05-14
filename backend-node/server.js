@@ -3,8 +3,12 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+const nodemailer = require("nodemailer");
 
 const { query, one, tx, pool } = require("./db");
 const { runMigrations } = require("./migrations");
@@ -16,10 +20,30 @@ const {
 const JWT_SECRET = process.env.JWT_SECRET || "change-me";
 const JWT_EXPIRE_DAYS = Number(process.env.JWT_EXPIRE_DAYS || 30);
 const PORT = Number(process.env.PORT || 8001);
+const RESET_CODE_MINUTES = Number(process.env.RESET_CODE_MINUTES || 30);
 
 const app = express();
-app.use(cors());
+app.disable("x-powered-by");
+app.set("trust proxy", Number(process.env.TRUST_PROXY || 1));
+app.use(helmet());
+const corsOrigin = process.env.CORS_ORIGIN || "*";
+app.use(cors({ origin: corsOrigin === "*" ? "*" : corsOrigin.split(",").map((s) => s.trim()) }));
 app.use(express.json({ limit: "2mb" }));
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_MAX || 600),
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX || 30),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { detail: "Muitas tentativas. Aguarde alguns minutos e tente novamente." },
+});
+app.use("/api", apiLimiter);
 
 const api = express.Router();
 
@@ -56,8 +80,114 @@ async function ensureMember(houseId, userId) {
   return m;
 }
 
+const PERMISSION_LABELS = {
+  view_dashboard: "Ver painel da casa",
+  view_statement: "Ver extrato da casa",
+  manage_expenses: "Cadastrar/remover gastos",
+  manage_recurring: "Gerenciar recorrentes",
+  manage_contributions: "Gerenciar contribuições",
+  manage_payments: "Registrar acertos",
+  manage_bills: "Gerenciar contas a pagar/receber",
+  manage_shopping_list: "Usar lista de compras",
+  manage_chores: "Gerenciar afazeres da casa",
+  manage_members: "Gerenciar moradores e permissões",
+  manage_settings: "Alterar configurações da casa",
+};
+const PERMISSION_KEYS = Object.keys(PERMISSION_LABELS);
+const DEFAULT_MEMBER_PERMISSIONS = {
+  view_dashboard: true,
+  view_statement: true,
+  manage_expenses: true,
+  manage_recurring: true,
+  manage_contributions: true,
+  manage_payments: true,
+  manage_bills: true,
+  manage_shopping_list: true,
+  manage_chores: false,
+  manage_members: false,
+  manage_settings: false,
+};
+
+function parsePermissions(raw, isOwner = false) {
+  if (isOwner) return Object.fromEntries(PERMISSION_KEYS.map((k) => [k, true]));
+  let saved = {};
+  try {
+    saved = raw ? JSON.parse(raw) : {};
+  } catch {
+    saved = {};
+  }
+  const out = { ...DEFAULT_MEMBER_PERMISSIONS };
+  for (const key of PERMISSION_KEYS) {
+    if (typeof saved[key] === "boolean") out[key] = saved[key];
+  }
+  return out;
+}
+
+function canMember(member, house, permission) {
+  if (!permission) return true;
+  const isOwner = member.role === "owner" || member.user_id === house.owner_id;
+  if (isOwner) return true;
+  const perms = parsePermissions(member.permissions_json, false);
+  return perms[permission] === true;
+}
+
+async function ensurePermission(houseId, userId, permission) {
+  const member = await ensureMember(houseId, userId);
+  const house = await one("SELECT * FROM houses WHERE id=?", [houseId]);
+  if (!house) {
+    const err = new Error("Casa não encontrada");
+    err.status = 404;
+    throw err;
+  }
+  if (!canMember(member, house, permission)) {
+    const err = new Error("Sem permissão para esta ação");
+    err.status = 403;
+    throw err;
+  }
+  return { member, house };
+}
+
 function sanitizeUser(u) {
   return { id: u.id, email: u.email, name: u.name, avatar_url: u.avatar_url || null };
+}
+
+function resetCodeHash(email, code) {
+  return crypto
+    .createHash("sha256")
+    .update(`${String(email).toLowerCase().trim()}:${String(code).trim()}:${JWT_SECRET}`)
+    .digest("hex");
+}
+
+function minutesFromNow(minutes) {
+  return new Date(Date.now() + minutes * 60 * 1000).toISOString().slice(0, 19).replace("T", " ");
+}
+
+function smtpConfigured() {
+  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD);
+}
+
+async function sendPasswordResetEmail(to, name, code) {
+  if (!smtpConfigured()) {
+    const err = new Error("Serviço de e-mail não configurado no servidor");
+    err.status = 500;
+    throw err;
+  }
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 465),
+    secure: String(process.env.SMTP_SECURE || "true") !== "false",
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASSWORD,
+    },
+  });
+  const from = process.env.SMTP_FROM || `"JCIP House" <${process.env.SMTP_USER}>`;
+  await transporter.sendMail({
+    from,
+    to,
+    subject: "Código para redefinir sua senha - JCIP House",
+    text: `Olá${name ? `, ${name}` : ""}.\n\nSeu código para redefinir a senha do JCIP House é: ${code}\n\nEle expira em ${RESET_CODE_MINUTES} minutos. Se você não pediu isso, ignore este e-mail.`,
+  });
 }
 
 function wrap(fn) {
@@ -175,10 +305,15 @@ async function serializeHouse(h) {
     owner_id: h.owner_id,
     gamification_enabled: !!h.gamification_enabled,
     month_start_day: h.month_start_day,
-    members: members.map((m) => ({
-      id: m.id, user_id: m.user_id, name: m.user_name, email: m.email,
-      weight: m.weight, role: m.role, avatar_url: m.avatar_url,
-    })),
+    permissions_catalog: PERMISSION_LABELS,
+    members: members.map((m) => {
+      const isOwner = m.role === "owner" || m.user_id === h.owner_id;
+      return {
+        id: m.id, user_id: m.user_id, name: m.user_name, email: m.email,
+        weight: m.weight, role: m.role, avatar_url: m.avatar_url,
+        permissions: parsePermissions(m.permissions_json, isOwner),
+      };
+    }),
   };
 }
 
@@ -229,7 +364,7 @@ api.get("/health", wrap(async (_req, res) => {
 }));
 
 // AUTH
-api.post("/auth/register", wrap(async (req, res) => {
+api.post("/auth/register", authLimiter, wrap(async (req, res) => {
   const { email, name, password } = req.body || {};
   if (!email || !name || !password || password.length < 6) {
     return res.status(400).json({ detail: "Dados inválidos (senha mín. 6 chars)" });
@@ -240,15 +375,32 @@ api.post("/auth/register", wrap(async (req, res) => {
   const hash = await bcrypt.hash(password, 10);
   const id = uuidv4();
   const n = nowUtc();
-  await query(
-    `INSERT INTO users (id,email,name,password_hash,created_at,updated_at) VALUES (?,?,?,?,?,?)`,
-    [id, em, String(name).trim(), hash, n, n]
-  );
+  await tx(async (c) => {
+    await c.execute(
+      `INSERT INTO users (id,email,name,password_hash,created_at,updated_at) VALUES (?,?,?,?,?,?)`,
+      [id, em, String(name).trim(), hash, n, n]
+    );
+    if (req.body?.accepted_lgpd === true) {
+      await c.execute(
+        `INSERT INTO user_consents (id,user_id,consent_type,version,accepted_at,ip_address,user_agent)
+         VALUES (?,?,?,?,?,?,?)`,
+        [
+          uuidv4(),
+          id,
+          "lgpd_terms",
+          "1.2-test",
+          n,
+          req.ip || null,
+          String(req.headers["user-agent"] || "").slice(0, 500) || null,
+        ]
+      );
+    }
+  });
   const u = await one("SELECT * FROM users WHERE id=?", [id]);
   res.json({ token: signToken(id), user: sanitizeUser(u) });
 }));
 
-api.post("/auth/login", wrap(async (req, res) => {
+api.post("/auth/login", authLimiter, wrap(async (req, res) => {
   const { email, password } = req.body || {};
   const u = await one("SELECT * FROM users WHERE email=?", [String(email || "").toLowerCase().trim()]);
   if (!u || !(await bcrypt.compare(password || "", u.password_hash))) {
@@ -258,6 +410,55 @@ api.post("/auth/login", wrap(async (req, res) => {
 }));
 
 api.get("/auth/me", auth, wrap(async (req, res) => res.json(sanitizeUser(req.user))));
+
+api.put("/auth/me", auth, wrap(async (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  if (name.length < 2) return res.status(400).json({ detail: "Nome inválido" });
+  await query("UPDATE users SET name=?, updated_at=? WHERE id=?", [name, nowUtc(), req.user.id]);
+  const fresh = await one("SELECT * FROM users WHERE id=?", [req.user.id]);
+  res.json(sanitizeUser(fresh));
+}));
+
+api.post("/auth/forgot-password", authLimiter, wrap(async (req, res) => {
+  const email = String(req.body?.email || "").toLowerCase().trim();
+  if (!email) return res.status(400).json({ detail: "Informe o e-mail" });
+  const u = await one("SELECT * FROM users WHERE email=?", [email]);
+  if (!u) {
+    return res.json({ ok: true, message: "Se o e-mail existir, enviaremos um código de redefinição." });
+  }
+  const code = String(crypto.randomInt(100000, 1000000));
+  await query(
+    `INSERT INTO password_reset_tokens (id,user_id,email,code_hash,expires_at,created_at)
+     VALUES (?,?,?,?,?,?)`,
+    [uuidv4(), u.id, email, resetCodeHash(email, code), minutesFromNow(RESET_CODE_MINUTES), nowUtc()]
+  );
+  await sendPasswordResetEmail(email, u.name, code);
+  res.json({ ok: true, message: "Código enviado para o e-mail informado." });
+}));
+
+api.post("/auth/reset-password", authLimiter, wrap(async (req, res) => {
+  const email = String(req.body?.email || "").toLowerCase().trim();
+  const code = String(req.body?.code || "").trim();
+  const password = String(req.body?.password || "");
+  if (!email || !code || password.length < 6) {
+    return res.status(400).json({ detail: "Informe e-mail, código e senha com no mínimo 6 caracteres" });
+  }
+  const u = await one("SELECT * FROM users WHERE email=?", [email]);
+  if (!u) return res.status(400).json({ detail: "Código inválido ou expirado" });
+  const token = await one(
+    `SELECT * FROM password_reset_tokens
+     WHERE user_id=? AND email=? AND code_hash=? AND used_at IS NULL AND expires_at >= ?
+     ORDER BY created_at DESC LIMIT 1`,
+    [u.id, email, resetCodeHash(email, code), nowUtc()]
+  );
+  if (!token) return res.status(400).json({ detail: "Código inválido ou expirado" });
+  const hash = await bcrypt.hash(password, 10);
+  await tx(async (c) => {
+    await c.execute("UPDATE users SET password_hash=?, updated_at=? WHERE id=?", [hash, nowUtc(), u.id]);
+    await c.execute("UPDATE password_reset_tokens SET used_at=? WHERE id=?", [nowUtc(), token.id]);
+  });
+  res.json({ ok: true, message: "Senha alterada com sucesso." });
+}));
 
 // HOUSES
 api.post("/houses", auth, wrap(async (req, res) => {
@@ -337,10 +538,8 @@ api.get("/houses/:id", auth, wrap(async (req, res) => {
 }));
 
 api.put("/houses/:id/settings", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
-  const h = await one("SELECT * FROM houses WHERE id=?", [req.params.id]);
+  const { house: h } = await ensurePermission(req.params.id, req.user.id, "manage_settings");
   if (!h) return res.status(404).json({ detail: "Casa não encontrada" });
-  if (h.owner_id !== req.user.id) return res.status(403).json({ detail: "Apenas o dono pode alterar" });
   const { name, month_start_day, gamification_enabled } = req.body || {};
   const updates = [];
   const values = [];
@@ -359,11 +558,7 @@ api.put("/houses/:id/settings", auth, wrap(async (req, res) => {
 }));
 
 api.put("/houses/:id/members/weight", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
-  const ownerRow = await one("SELECT owner_id FROM houses WHERE id=?", [req.params.id]);
-  if (!ownerRow || ownerRow.owner_id !== req.user.id) {
-    return res.status(403).json({ detail: "Apenas o dono pode alterar pesos" });
-  }
+  await ensurePermission(req.params.id, req.user.id, "manage_members");
   const { user_id, weight } = req.body || {};
   const m = await one("SELECT id FROM house_members WHERE house_id=? AND user_id=?",
     [req.params.id, user_id]);
@@ -377,8 +572,8 @@ api.put("/houses/:id/members/weight", auth, wrap(async (req, res) => {
 api.delete("/houses/:id/members/:userId", auth, wrap(async (req, res) => {
   const h = await one("SELECT * FROM houses WHERE id=?", [req.params.id]);
   if (!h) return res.status(404).json({ detail: "Casa não encontrada" });
-  if (h.owner_id !== req.user.id && req.user.id !== req.params.userId) {
-    return res.status(403).json({ detail: "Apenas o dono remove outros" });
+  if (req.user.id !== req.params.userId) {
+    await ensurePermission(req.params.id, req.user.id, "manage_members");
   }
   if (req.params.userId === h.owner_id) {
     return res.status(400).json({ detail: "Não pode remover o dono" });
@@ -386,6 +581,25 @@ api.delete("/houses/:id/members/:userId", auth, wrap(async (req, res) => {
   await query("DELETE FROM house_members WHERE house_id=? AND user_id=?",
     [req.params.id, req.params.userId]);
   res.json({ ok: true });
+}));
+
+api.put("/houses/:id/members/:userId/permissions", auth, wrap(async (req, res) => {
+  await ensurePermission(req.params.id, req.user.id, "manage_members");
+  const h = await one("SELECT * FROM houses WHERE id=?", [req.params.id]);
+  if (!h) return res.status(404).json({ detail: "Casa não encontrada" });
+  if (req.params.userId === h.owner_id) {
+    return res.status(400).json({ detail: "O dono sempre tem todas as permissões" });
+  }
+  const target = await one("SELECT * FROM house_members WHERE house_id=? AND user_id=?",
+    [req.params.id, req.params.userId]);
+  if (!target) return res.status(404).json({ detail: "Membro não encontrado" });
+  const input = req.body?.permissions || {};
+  const clean = {};
+  for (const key of PERMISSION_KEYS) clean[key] = input[key] === true;
+  await query("UPDATE house_members SET permissions_json=? WHERE id=?",
+    [JSON.stringify(clean), target.id]);
+  const fresh = await one("SELECT * FROM houses WHERE id=?", [req.params.id]);
+  res.json(await serializeHouse(fresh));
 }));
 
 // CATEGORIES
@@ -399,7 +613,7 @@ api.get("/houses/:id/categories", auth, wrap(async (req, res) => {
 }));
 
 api.post("/houses/:id/categories", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_settings");
   const { name, icon = "tag", color = "#3b82f6", parent_id = null, is_market_style = false } = req.body || {};
   if (!name) return res.status(400).json({ detail: "Nome obrigatório" });
   const id = uuidv4();
@@ -416,7 +630,7 @@ api.post("/houses/:id/categories", auth, wrap(async (req, res) => {
 }));
 
 api.delete("/houses/:id/categories/:cat", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_settings");
   await query("DELETE FROM categories WHERE id=? AND house_id=?", [req.params.cat, req.params.id]);
   res.json({ ok: true });
 }));
@@ -438,7 +652,7 @@ api.get("/houses/:id/months", auth, wrap(async (req, res) => {
 }));
 
 api.post("/houses/:id/months/:mid/close", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_settings");
   const m = await one("SELECT * FROM months WHERE id=? AND house_id=?",
     [req.params.mid, req.params.id]);
   if (!m) return res.status(404).json({ detail: "Mês não encontrado" });
@@ -470,7 +684,7 @@ api.post("/houses/:id/months/:mid/close", auth, wrap(async (req, res) => {
 }));
 
 api.post("/houses/:id/months/:mid/reopen", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_settings");
   await query(
     "UPDATE months SET status='open', closed_at=NULL WHERE id=? AND house_id=?",
     [req.params.mid, req.params.id]
@@ -486,7 +700,7 @@ api.post("/houses/:id/months/:mid/reopen", auth, wrap(async (req, res) => {
 
 // EXPENSES
 api.post("/houses/:id/expenses", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_expenses");
   const p = req.body || {};
   await ensureMember(req.params.id, p.payer_id);
   const h = await one("SELECT * FROM houses WHERE id=?", [req.params.id]);
@@ -554,7 +768,7 @@ api.get("/houses/:id/expenses", auth, wrap(async (req, res) => {
 }));
 
 api.delete("/houses/:id/expenses/:eid", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_expenses");
   const e = await one("SELECT * FROM expenses WHERE id=? AND house_id=?",
     [req.params.eid, req.params.id]);
   if (!e) return res.status(404).json({ detail: "Não encontrada" });
@@ -568,7 +782,7 @@ api.delete("/houses/:id/expenses/:eid", auth, wrap(async (req, res) => {
 
 // CONTRIBUTIONS
 api.post("/houses/:id/contributions", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_contributions");
   const p = req.body || {};
   await ensureMember(req.params.id, p.user_id);
   const h = await one("SELECT * FROM houses WHERE id=?", [req.params.id]);
@@ -606,7 +820,7 @@ api.get("/houses/:id/contributions", auth, wrap(async (req, res) => {
 }));
 
 api.delete("/houses/:id/contributions/:cid", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_contributions");
   await query("DELETE FROM contributions WHERE id=? AND house_id=?",
     [req.params.cid, req.params.id]);
   res.json({ ok: true });
@@ -614,7 +828,7 @@ api.delete("/houses/:id/contributions/:cid", auth, wrap(async (req, res) => {
 
 // PAYMENTS
 api.post("/houses/:id/payments", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_payments");
   const p = req.body || {};
   await ensureMember(req.params.id, p.from_user_id);
   await ensureMember(req.params.id, p.to_user_id);
@@ -625,6 +839,418 @@ api.post("/houses/:id/payments", auth, wrap(async (req, res) => {
     [id, req.params.id, p.from_user_id, p.to_user_id, round2(p.amount), p.note || null, today(), nowUtc()]
   );
   res.json({ ok: true, id });
+}));
+
+// STATEMENT
+api.get("/houses/:id/statement", auth, wrap(async (req, res) => {
+  await ensurePermission(req.params.id, req.user.id, "view_statement");
+  const params = [req.params.id];
+  let monthFilter = "";
+  let selectedMonth = null;
+  if (req.query.month_id) {
+    selectedMonth = await one("SELECT * FROM months WHERE id=? AND house_id=?", [req.query.month_id, req.params.id]);
+    if (!selectedMonth) return res.status(404).json({ detail: "Mês não encontrado" });
+    monthFilter = " AND month_id=?";
+    params.push(req.query.month_id);
+  }
+
+  const expenses = await query(
+    `SELECT e.*, u.name AS user_name, c.name AS category_name
+     FROM expenses e
+     JOIN users u ON u.id=e.payer_id
+     LEFT JOIN categories c ON c.id=e.category_id
+     WHERE e.house_id=?${monthFilter}`,
+    params
+  );
+  const contributions = await query(
+    `SELECT co.*, u.name AS user_name
+     FROM contributions co JOIN users u ON u.id=co.user_id
+     WHERE co.house_id=?${monthFilter}`,
+    params
+  );
+  const payParams = [req.params.id];
+  let payFilter = "";
+  if (selectedMonth) {
+    payFilter = " AND p.payment_date >= ? AND p.payment_date < ?";
+    payParams.push(selectedMonth.start_date, selectedMonth.end_date);
+  }
+  const payments = await query(
+    `SELECT p.*, fu.name AS from_name, tu.name AS to_name
+     FROM payments p
+     JOIN users fu ON fu.id=p.from_user_id
+     JOIN users tu ON tu.id=p.to_user_id
+     WHERE p.house_id=?${payFilter}`,
+    payParams
+  );
+
+  const rows = [
+    ...expenses.map((e) => ({
+      id: e.id,
+      type: "expense",
+      direction: "out",
+      date: e.expense_date,
+      amount: e.amount,
+      title: e.description,
+      subtitle: `${e.user_name}${e.category_name ? ` • ${e.category_name}` : ""}`,
+      user_id: e.payer_id,
+      created_at: e.created_at,
+    })),
+    ...contributions.map((c) => ({
+      id: c.id,
+      type: "contribution",
+      direction: "in",
+      date: c.contribution_date,
+      amount: c.amount,
+      title: c.description || "Contribuição",
+      subtitle: c.user_name,
+      user_id: c.user_id,
+      created_at: c.created_at,
+    })),
+    ...payments.map((p) => ({
+      id: p.id,
+      type: "payment",
+      direction: "transfer",
+      date: p.payment_date,
+      amount: p.amount,
+      title: p.note || "Acerto de contas",
+      subtitle: `${p.from_name} pagou ${p.to_name}`,
+      user_id: p.from_user_id,
+      created_at: p.created_at,
+    })),
+  ].sort((a, b) => String(b.date + b.created_at).localeCompare(String(a.date + a.created_at)));
+
+  res.json(rows);
+}));
+
+// SHOPPING LIST
+api.get("/houses/:id/shopping-items", auth, wrap(async (req, res) => {
+  await ensurePermission(req.params.id, req.user.id, "manage_shopping_list");
+  const rows = await query(
+    `SELECT s.*, u.name AS created_by_name
+     FROM shopping_list_items s
+     LEFT JOIN users u ON u.id=s.created_by_user_id
+     WHERE s.house_id=?
+     ORDER BY s.is_checked ASC, s.created_at DESC`,
+    [req.params.id]
+  );
+  res.json(rows.map((s) => ({
+    id: s.id,
+    name: s.name,
+    quantity: s.quantity,
+    unit: s.unit,
+    notes: s.notes,
+    is_checked: !!s.is_checked,
+    created_by_user_id: s.created_by_user_id,
+    created_by_name: s.created_by_name,
+    created_at: s.created_at,
+    updated_at: s.updated_at,
+  })));
+}));
+
+api.post("/houses/:id/shopping-items", auth, wrap(async (req, res) => {
+  await ensurePermission(req.params.id, req.user.id, "manage_shopping_list");
+  const name = String(req.body?.name || "").trim();
+  if (name.length < 2) return res.status(400).json({ detail: "Nome do item inválido" });
+  const id = uuidv4();
+  await query(
+    `INSERT INTO shopping_list_items
+     (id,house_id,created_by_user_id,name,quantity,unit,notes,is_checked,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    [
+      id, req.params.id, req.user.id, name,
+      Math.max(0.01, Number(req.body?.quantity) || 1),
+      req.body?.unit ? String(req.body.unit).slice(0, 30) : null,
+      req.body?.notes ? String(req.body.notes).slice(0, 255) : null,
+      req.body?.is_checked ? 1 : 0,
+      nowUtc(),
+    ]
+  );
+  const rows = await query("SELECT * FROM shopping_list_items WHERE id=?", [id]);
+  res.json({ ...rows[0], is_checked: !!rows[0].is_checked });
+}));
+
+api.put("/houses/:id/shopping-items/:itemId", auth, wrap(async (req, res) => {
+  await ensurePermission(req.params.id, req.user.id, "manage_shopping_list");
+  const current = await one("SELECT * FROM shopping_list_items WHERE id=? AND house_id=?",
+    [req.params.itemId, req.params.id]);
+  if (!current) return res.status(404).json({ detail: "Item não encontrado" });
+  const name = req.body?.name != null ? String(req.body.name).trim() : current.name;
+  if (name.length < 2) return res.status(400).json({ detail: "Nome do item inválido" });
+  await query(
+    `UPDATE shopping_list_items
+     SET name=?, quantity=?, unit=?, notes=?, is_checked=?, updated_at=?
+     WHERE id=? AND house_id=?`,
+    [
+      name,
+      req.body?.quantity != null ? Math.max(0.01, Number(req.body.quantity) || 1) : current.quantity,
+      req.body?.unit != null ? String(req.body.unit).slice(0, 30) : current.unit,
+      req.body?.notes != null ? String(req.body.notes).slice(0, 255) : current.notes,
+      req.body?.is_checked != null ? (req.body.is_checked ? 1 : 0) : current.is_checked,
+      nowUtc(),
+      req.params.itemId,
+      req.params.id,
+    ]
+  );
+  const fresh = await one("SELECT * FROM shopping_list_items WHERE id=?", [req.params.itemId]);
+  res.json({ ...fresh, is_checked: !!fresh.is_checked });
+}));
+
+api.delete("/houses/:id/shopping-items/:itemId", auth, wrap(async (req, res) => {
+  await ensurePermission(req.params.id, req.user.id, "manage_shopping_list");
+  await query("DELETE FROM shopping_list_items WHERE id=? AND house_id=?", [req.params.itemId, req.params.id]);
+  res.json({ ok: true });
+}));
+
+// BILLS (accounts payable / receivable)
+function serializeBill(b) {
+  return {
+    id: b.id,
+    bill_type: b.bill_type,
+    title: b.title,
+    description: b.description,
+    amount: b.amount,
+    paid_amount: b.paid_amount,
+    due_date: b.due_date,
+    paid_at: b.paid_at,
+    status: b.status,
+    party_name: b.party_name,
+    category_id: b.category_id,
+    category_name: b.category_name || null,
+    user_id: b.user_id,
+    user_name: b.user_name || null,
+    created_at: b.created_at,
+    updated_at: b.updated_at,
+  };
+}
+
+api.get("/houses/:id/bills", auth, wrap(async (req, res) => {
+  await ensurePermission(req.params.id, req.user.id, "manage_bills");
+  const params = [req.params.id];
+  let sql = `SELECT b.*, c.name AS category_name, u.name AS user_name
+             FROM bills b
+             LEFT JOIN categories c ON c.id=b.category_id
+             LEFT JOIN users u ON u.id=b.user_id
+             WHERE b.house_id=?`;
+  if (req.query.bill_type) {
+    sql += " AND b.bill_type=?";
+    params.push(req.query.bill_type);
+  }
+  if (req.query.status) {
+    sql += " AND b.status=?";
+    params.push(req.query.status);
+  }
+  sql += " ORDER BY b.status='paid' ASC, b.due_date ASC, b.created_at DESC LIMIT 500";
+  const rows = await query(sql, params);
+  res.json(rows.map(serializeBill));
+}));
+
+api.post("/houses/:id/bills", auth, wrap(async (req, res) => {
+  await ensurePermission(req.params.id, req.user.id, "manage_bills");
+  const p = req.body || {};
+  const title = String(p.title || "").trim();
+  const billType = ["payable", "receivable"].includes(p.bill_type) ? p.bill_type : "payable";
+  if (!title || !(Number(p.amount) > 0) || !p.due_date) {
+    return res.status(400).json({ detail: "Informe título, valor e vencimento" });
+  }
+  if (p.user_id) await ensureMember(req.params.id, p.user_id);
+  const id = uuidv4();
+  await query(
+    `INSERT INTO bills
+     (id,house_id,user_id,category_id,bill_type,title,description,amount,paid_amount,due_date,status,party_name,created_by_user_id,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [
+      id, req.params.id, p.user_id || null, p.category_id || null, billType,
+      title, p.description || null, round2(p.amount), 0, p.due_date,
+      p.status || "open", p.party_name || null, req.user.id, nowUtc(),
+    ]
+  );
+  const row = await one(
+    `SELECT b.*, c.name AS category_name, u.name AS user_name
+     FROM bills b
+     LEFT JOIN categories c ON c.id=b.category_id
+     LEFT JOIN users u ON u.id=b.user_id WHERE b.id=?`,
+    [id]
+  );
+  res.json(serializeBill(row));
+}));
+
+api.put("/houses/:id/bills/:billId", auth, wrap(async (req, res) => {
+  await ensurePermission(req.params.id, req.user.id, "manage_bills");
+  const current = await one("SELECT * FROM bills WHERE id=? AND house_id=?", [req.params.billId, req.params.id]);
+  if (!current) return res.status(404).json({ detail: "Conta não encontrada" });
+  const p = req.body || {};
+  const status = p.status || current.status;
+  const paidAmount = p.paid_amount != null ? round2(p.paid_amount) : current.paid_amount;
+  await query(
+    `UPDATE bills SET title=?, description=?, amount=?, paid_amount=?, due_date=?,
+       status=?, party_name=?, paid_at=?, updated_at=?
+     WHERE id=? AND house_id=?`,
+    [
+      p.title != null ? String(p.title).trim() : current.title,
+      p.description != null ? p.description : current.description,
+      p.amount != null ? round2(p.amount) : current.amount,
+      paidAmount,
+      p.due_date || current.due_date,
+      status,
+      p.party_name != null ? p.party_name : current.party_name,
+      status === "paid" ? (current.paid_at || nowUtc()) : null,
+      nowUtc(),
+      req.params.billId,
+      req.params.id,
+    ]
+  );
+  const row = await one(
+    `SELECT b.*, c.name AS category_name, u.name AS user_name
+     FROM bills b
+     LEFT JOIN categories c ON c.id=b.category_id
+     LEFT JOIN users u ON u.id=b.user_id WHERE b.id=?`,
+    [req.params.billId]
+  );
+  res.json(serializeBill(row));
+}));
+
+api.delete("/houses/:id/bills/:billId", auth, wrap(async (req, res) => {
+  await ensurePermission(req.params.id, req.user.id, "manage_bills");
+  await query("DELETE FROM bills WHERE id=? AND house_id=?", [req.params.billId, req.params.id]);
+  res.json({ ok: true });
+}));
+
+// CHORES
+async function serializeChore(row) {
+  const assignments = await query(
+    `SELECT a.*, u.name AS user_name, u.email
+     FROM house_chore_assignments a
+     JOIN users u ON u.id=a.user_id
+     WHERE a.chore_id=?
+     ORDER BY u.name`,
+    [row.id]
+  );
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    due_at: row.due_at,
+    recurrence: row.recurrence,
+    status: row.status,
+    created_by_user_id: row.created_by_user_id,
+    created_by_name: row.created_by_name || null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    assignments: assignments.map((a) => ({
+      id: a.id,
+      user_id: a.user_id,
+      user_name: a.user_name,
+      email: a.email,
+      status: a.status,
+      completed_at: a.completed_at,
+      completed_by_user_id: a.completed_by_user_id,
+    })),
+  };
+}
+
+async function canCompleteChore(choreId, userId, houseId) {
+  const assignment = await one(
+    `SELECT a.id FROM house_chore_assignments a
+     JOIN house_chores c ON c.id=a.chore_id
+     WHERE a.chore_id=? AND c.house_id=? AND a.user_id=?`,
+    [choreId, houseId, userId]
+  );
+  if (assignment) return true;
+  const member = await ensureMember(houseId, userId);
+  const h = await one("SELECT * FROM houses WHERE id=?", [houseId]);
+  return canMember(member, h, "manage_chores");
+}
+
+api.get("/houses/:id/chores", auth, wrap(async (req, res) => {
+  await ensureMember(req.params.id, req.user.id);
+  const rows = await query(
+    `SELECT c.*, u.name AS created_by_name
+     FROM house_chores c
+     LEFT JOIN users u ON u.id=c.created_by_user_id
+     WHERE c.house_id=?
+     ORDER BY c.status='done' ASC, c.due_at IS NULL ASC, c.due_at ASC, c.created_at DESC`,
+    [req.params.id]
+  );
+  const out = [];
+  for (const row of rows) out.push(await serializeChore(row));
+  res.json(out);
+}));
+
+api.post("/houses/:id/chores", auth, wrap(async (req, res) => {
+  await ensurePermission(req.params.id, req.user.id, "manage_chores");
+  const title = String(req.body?.title || "").trim();
+  if (title.length < 2) return res.status(400).json({ detail: "Título inválido" });
+  const assignees = Array.isArray(req.body?.assignee_user_ids) ? req.body.assignee_user_ids : [];
+  if (!assignees.length) return res.status(400).json({ detail: "Escolha pelo menos um responsável" });
+  for (const uid of assignees) await ensureMember(req.params.id, uid);
+  const id = uuidv4();
+  await tx(async (c) => {
+    await c.execute(
+      `INSERT INTO house_chores
+       (id,house_id,title,description,due_at,recurrence,status,created_by_user_id,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+      [
+        id,
+        req.params.id,
+        title,
+        req.body?.description || null,
+        req.body?.due_at || null,
+        req.body?.recurrence || "none",
+        "open",
+        req.user.id,
+        nowUtc(),
+      ]
+    );
+    for (const uid of assignees) {
+      await c.execute(
+        `INSERT INTO house_chore_assignments (id,chore_id,user_id,status,created_at)
+         VALUES (?,?,?,?,?)`,
+        [uuidv4(), id, uid, "pending", nowUtc()]
+      );
+    }
+  });
+  const row = await one(
+    `SELECT c.*, u.name AS created_by_name
+     FROM house_chores c LEFT JOIN users u ON u.id=c.created_by_user_id WHERE c.id=?`,
+    [id]
+  );
+  res.json(await serializeChore(row));
+}));
+
+api.post("/houses/:id/chores/:choreId/complete", auth, wrap(async (req, res) => {
+  await ensureMember(req.params.id, req.user.id);
+  const chore = await one("SELECT * FROM house_chores WHERE id=? AND house_id=?",
+    [req.params.choreId, req.params.id]);
+  if (!chore) return res.status(404).json({ detail: "Afazer não encontrado" });
+  if (!(await canCompleteChore(req.params.choreId, req.user.id, req.params.id))) {
+    return res.status(403).json({ detail: "Apenas responsáveis ou gestores podem concluir" });
+  }
+  await query(
+    `UPDATE house_chore_assignments
+     SET status='done', completed_at=?, completed_by_user_id=?
+     WHERE chore_id=? AND user_id=?`,
+    [nowUtc(), req.user.id, req.params.choreId, req.user.id]
+  );
+  const pending = await one(
+    "SELECT id FROM house_chore_assignments WHERE chore_id=? AND status<>'done' LIMIT 1",
+    [req.params.choreId]
+  );
+  await query(
+    "UPDATE house_chores SET status=?, updated_at=? WHERE id=?",
+    [pending ? "open" : "done", nowUtc(), req.params.choreId]
+  );
+  const row = await one(
+    `SELECT c.*, u.name AS created_by_name
+     FROM house_chores c LEFT JOIN users u ON u.id=c.created_by_user_id WHERE c.id=?`,
+    [req.params.choreId]
+  );
+  res.json(await serializeChore(row));
+}));
+
+api.delete("/houses/:id/chores/:choreId", auth, wrap(async (req, res) => {
+  await ensurePermission(req.params.id, req.user.id, "manage_chores");
+  await query("DELETE FROM house_chores WHERE id=? AND house_id=?", [req.params.choreId, req.params.id]);
+  res.json({ ok: true });
 }));
 
 // RECURRING
@@ -648,7 +1274,7 @@ api.get("/houses/:id/recurring", auth, wrap(async (req, res) => {
 }));
 
 api.post("/houses/:id/recurring", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_recurring");
   const p = req.body || {};
   await ensureMember(req.params.id, p.payer_id);
   const id = uuidv4();
@@ -680,7 +1306,7 @@ api.post("/houses/:id/recurring", auth, wrap(async (req, res) => {
 }));
 
 api.put("/houses/:id/recurring/:rid", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_recurring");
   const p = req.body || {};
   await query(
     `UPDATE recurring_expenses SET
@@ -712,7 +1338,7 @@ api.put("/houses/:id/recurring/:rid", auth, wrap(async (req, res) => {
 }));
 
 api.delete("/houses/:id/recurring/:rid", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_recurring");
   await query("DELETE FROM recurring_expenses WHERE id=? AND house_id=?",
     [req.params.rid, req.params.id]);
   res.json({ ok: true });
@@ -733,7 +1359,7 @@ api.get("/houses/:id/contribution-plans", auth, wrap(async (req, res) => {
 }));
 
 api.post("/houses/:id/contribution-plans", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_contributions");
   const p = req.body || {};
   await ensureMember(req.params.id, p.user_id);
   const existing = await one(
@@ -764,7 +1390,7 @@ api.post("/houses/:id/contribution-plans", auth, wrap(async (req, res) => {
 }));
 
 api.delete("/houses/:id/contribution-plans/:pid", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_contributions");
   await query("DELETE FROM contribution_plans WHERE id=? AND house_id=?",
     [req.params.pid, req.params.id]);
   res.json({ ok: true });
@@ -772,7 +1398,7 @@ api.delete("/houses/:id/contribution-plans/:pid", auth, wrap(async (req, res) =>
 
 // GENERATE CURRENT MONTH (recurring + plans)
 api.post("/houses/:id/months/current/generate", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "manage_recurring");
   const h = await one("SELECT * FROM houses WHERE id=?", [req.params.id]);
   const month = await currentMonth(h.id, h.month_start_day);
   const tag = `${month.year}-${String(month.month_number).padStart(2, "0")}`;
@@ -842,7 +1468,7 @@ api.post("/houses/:id/months/current/generate", auth, wrap(async (req, res) => {
 
 // DASHBOARD
 api.get("/houses/:id/dashboard", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensurePermission(req.params.id, req.user.id, "view_dashboard");
   const h = await one("SELECT * FROM houses WHERE id=?", [req.params.id]);
   if (!h) return res.status(404).json({ detail: "Casa não encontrada" });
 

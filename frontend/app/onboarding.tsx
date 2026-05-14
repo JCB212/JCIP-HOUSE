@@ -15,10 +15,13 @@ import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/AuthContext";
-import { colors, radius, spacing } from "../src/theme";
+import { radius, spacing } from "../src/theme";
+import { useAppTheme } from "../src/ThemeContext";
 
 export default function Onboarding() {
   const { createHouse, joinHouse, logout } = useAuth();
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const router = useRouter();
   const [mode, setMode] = useState<"create" | "join">("create");
   const [name, setName] = useState("");
@@ -49,7 +52,7 @@ export default function Onboarding() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.headerRow}>
             <View style={styles.iconBadge}>
-              <Ionicons name="home" size={22} color="#fff" />
+              <Ionicons name="home" size={22} color={colors.primaryText} />
             </View>
             <TouchableOpacity onPress={logout}>
               <Text style={styles.logoutTxt}>Sair</Text>
@@ -117,7 +120,7 @@ export default function Onboarding() {
               onPress={onSubmit}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.primaryText} />
               ) : (
                 <Text style={styles.btnPrimaryText}>
                   {mode === "create" ? "Criar casa" : "Entrar na casa"}
@@ -131,7 +134,7 @@ export default function Onboarding() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   scroll: { padding: spacing.lg, flexGrow: 1, paddingTop: spacing.lg },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   iconBadge: {
@@ -180,5 +183,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: spacing.lg,
   },
-  btnPrimaryText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  btnPrimaryText: { color: colors.primaryText, fontWeight: "700", fontSize: 16 },
 });

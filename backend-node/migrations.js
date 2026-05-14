@@ -32,9 +32,35 @@ const TABLES = [
     user_id VARCHAR(36) NOT NULL,
     weight DOUBLE NOT NULL DEFAULT 1,
     role VARCHAR(20) NOT NULL DEFAULT 'member',
+    permissions_json LONGTEXT NULL,
     joined_at DATETIME NOT NULL,
     UNIQUE KEY uq_house_user (house_id, user_id),
     FOREIGN KEY (house_id) REFERENCES houses(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    code_hash VARCHAR(128) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME NULL,
+    created_at DATETIME NOT NULL,
+    INDEX idx_reset_user_email (user_id, email),
+    INDEX idx_reset_expires (expires_at),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS user_consents (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    consent_type VARCHAR(60) NOT NULL,
+    version VARCHAR(20) NOT NULL,
+    accepted_at DATETIME NOT NULL,
+    ip_address VARCHAR(80) NULL,
+    user_agent VARCHAR(500) NULL,
+    UNIQUE KEY uq_user_consent_version (user_id, consent_type, version),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
@@ -309,6 +335,54 @@ const TABLES = [
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
   ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
+  `CREATE TABLE IF NOT EXISTS shopping_list_items (
+    id VARCHAR(36) PRIMARY KEY,
+    house_id VARCHAR(36) NOT NULL,
+    created_by_user_id VARCHAR(36) NULL,
+    name VARCHAR(180) NOT NULL,
+    quantity DOUBLE NOT NULL DEFAULT 1,
+    unit VARCHAR(30) NULL,
+    notes VARCHAR(255) NULL,
+    is_checked TINYINT(1) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NULL,
+    INDEX idx_shopping_house_checked (house_id, is_checked),
+    FOREIGN KEY (house_id) REFERENCES houses(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS house_chores (
+    id VARCHAR(36) PRIMARY KEY,
+    house_id VARCHAR(36) NOT NULL,
+    title VARCHAR(180) NOT NULL,
+    description TEXT NULL,
+    due_at DATETIME NULL,
+    recurrence VARCHAR(30) NOT NULL DEFAULT 'none',
+    status VARCHAR(20) NOT NULL DEFAULT 'open',
+    created_by_user_id VARCHAR(36) NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NULL,
+    INDEX idx_chores_house_due (house_id, due_at),
+    INDEX idx_chores_status (status),
+    FOREIGN KEY (house_id) REFERENCES houses(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS house_chore_assignments (
+    id VARCHAR(36) PRIMARY KEY,
+    chore_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    completed_at DATETIME NULL,
+    completed_by_user_id VARCHAR(36) NULL,
+    created_at DATETIME NOT NULL,
+    UNIQUE KEY uq_chore_user (chore_id, user_id),
+    INDEX idx_chore_assignment_user (user_id, status),
+    FOREIGN KEY (chore_id) REFERENCES house_chores(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (completed_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
   `CREATE TABLE IF NOT EXISTS documents (
     id VARCHAR(36) PRIMARY KEY,
     house_id VARCHAR(36) NOT NULL,
@@ -426,10 +500,19 @@ const TABLES = [
   ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
+async function ensureColumn(table, column, definition) {
+  const rows = await query(`SHOW COLUMNS FROM \`${table}\` LIKE ?`, [column]);
+  if (!rows.length) {
+    await query(`ALTER TABLE \`${table}\` ADD COLUMN ${definition}`);
+    console.log(`[migrations] added ${table}.${column}`);
+  }
+}
+
 async function runMigrations() {
   for (const sql of TABLES) {
     await query(sql);
   }
+  await ensureColumn("house_members", "permissions_json", "permissions_json LONGTEXT NULL AFTER role");
   console.log(`[migrations] all ${TABLES.length} tables ready`);
 }
 

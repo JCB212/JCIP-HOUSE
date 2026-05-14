@@ -1,12 +1,15 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useAuth } from "../../src/AuthContext";
-import { colors, radius, spacing } from "../../src/theme";
+import { radius, spacing } from "../../src/theme";
+import { useAppTheme } from "../../src/ThemeContext";
 
 export default function Profile() {
   const { user, house, houses, setHouse, logout } = useAuth();
+  const { colors, mode, toggleTheme } = useAppTheme();
+  const styles = createStyles(colors);
   const router = useRouter();
 
   async function onLogout() {
@@ -32,6 +35,7 @@ export default function Profile() {
         <Text style={styles.title}>Perfil</Text>
 
         <View style={styles.userCard}>
+          <Image source={require("../../assets/images/jcip-house-logo.png")} style={styles.logo} resizeMode="contain" />
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{user?.name[0]?.toUpperCase()}</Text>
           </View>
@@ -65,11 +69,53 @@ export default function Profile() {
         </TouchableOpacity>
 
         <Text style={styles.section}>Conta</Text>
+        <TouchableOpacity style={styles.row} onPress={toggleTheme}>
+          <View style={[styles.rowIcon, { backgroundColor: colors.primarySoft }]}>
+            <Ionicons name={mode === "dark" ? "sunny-outline" : "moon-outline"} size={18} color={colors.neutral} />
+          </View>
+          <Text style={[styles.rowTitle, { flex: 1 }]}>{mode === "dark" ? "Usar modo claro" : "Usar modo escuro"}</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.row} onPress={() => router.push("/settings")}>
           <View style={styles.rowIcon}>
             <Ionicons name="settings-outline" size={18} color={colors.textPrimary} />
           </View>
           <Text style={[styles.rowTitle, { flex: 1 }]}>Configurações da casa</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.row} onPress={() => router.push("/statement")}>
+          <View style={styles.rowIcon}>
+            <Ionicons name="analytics-outline" size={18} color={colors.neutral} />
+          </View>
+          <Text style={[styles.rowTitle, { flex: 1 }]}>Extrato da casa</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.row} onPress={() => router.push("/bills")}>
+          <View style={[styles.rowIcon, { backgroundColor: colors.debtBg }]}>
+            <Ionicons name="wallet-outline" size={18} color={colors.debt} />
+          </View>
+          <Text style={[styles.rowTitle, { flex: 1 }]}>Contas a pagar/receber</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.row} onPress={() => router.push("/shopping-list")}>
+          <View style={[styles.rowIcon, { backgroundColor: colors.positiveBg }]}>
+            <Ionicons name="cart-outline" size={18} color={colors.positive} />
+          </View>
+          <Text style={[styles.rowTitle, { flex: 1 }]}>Lista de compras</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.row} onPress={() => router.push("/chores" as any)}>
+          <View style={[styles.rowIcon, { backgroundColor: colors.neutralBg }]}>
+            <Ionicons name="checkbox-outline" size={18} color={colors.neutral} />
+          </View>
+          <Text style={[styles.rowTitle, { flex: 1 }]}>Afazeres da casa</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.row} onPress={() => router.push("/help")}>
+          <View style={[styles.rowIcon, { backgroundColor: colors.neutralBg }]}>
+            <Ionicons name="help-circle-outline" size={18} color={colors.neutral} />
+          </View>
+          <Text style={[styles.rowTitle, { flex: 1 }]}>Ajuda e tutorial</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </TouchableOpacity>
 
@@ -80,13 +126,13 @@ export default function Profile() {
           <Text style={[styles.rowTitle, { color: colors.debt, flex: 1 }]}>Sair da conta</Text>
         </TouchableOpacity>
 
-        <Text style={styles.footer}>JCIP House Finance v1.0</Text>
+        <Text style={styles.footer}>JCIP House Finance v1.2</Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   title: { fontSize: 24, fontWeight: "800", color: colors.textPrimary, marginBottom: spacing.lg },
   userCard: {
     backgroundColor: colors.surface,
@@ -96,6 +142,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  logo: { width: 92, height: 92, borderRadius: 20, marginBottom: spacing.md },
   avatar: {
     width: 72,
     height: 72,

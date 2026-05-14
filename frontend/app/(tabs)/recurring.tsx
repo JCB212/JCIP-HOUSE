@@ -8,7 +8,8 @@ import { useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api";
 import { useAuth } from "../../src/AuthContext";
-import { colors, formatBRL, radius, spacing } from "../../src/theme";
+import { formatBRL, radius, spacing } from "../../src/theme";
+import { useAppTheme } from "../../src/ThemeContext";
 
 type Rec = {
   id: string; name: string; amount: number; category_id?: string | null;
@@ -26,6 +27,8 @@ type Cat = { id: string; name: string };
 
 export default function Recurring() {
   const { house } = useAuth();
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const [tab, setTab] = useState<"fixed" | "plans">("fixed");
   const [recurs, setRecurs] = useState<Rec[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -105,7 +108,7 @@ export default function Recurring() {
         <Text style={styles.title}>Recorrentes</Text>
         <TouchableOpacity testID="recurring-add-btn" style={styles.addBtn}
           onPress={() => (tab === "fixed" ? setShowRec(true) : setShowPlan(true))}>
-          <Ionicons name="add" size={20} color="#fff" />
+          <Ionicons name="add" size={20} color={colors.primaryText} />
         </TouchableOpacity>
       </View>
 
@@ -263,7 +266,7 @@ export default function Recurring() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: spacing.lg },
   title: { fontSize: 24, fontWeight: "800", color: colors.textPrimary },
   addBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },

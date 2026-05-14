@@ -69,6 +69,17 @@ DB_NAME=u251982692_jciphouse
 
 JWT_SECRET=COLOQUE_UMA_STRING_LONGA_ALEATORIA_AQUI
 JWT_EXPIRE_DAYS=30
+CORS_ORIGIN=*
+TRUST_PROXY=1
+RATE_LIMIT_MAX=600
+AUTH_RATE_LIMIT_MAX=30
+
+SMTP_HOST=smtp.hostinger.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=suporte@seu-dominio.com.br
+SMTP_PASSWORD=COLE_A_SENHA_DO_EMAIL_AQUI
+SMTP_FROM="JCIP House <suporte@seu-dominio.com.br>"
 ```
 
 Sobre `PORT`:
@@ -130,6 +141,22 @@ npx eas-cli build --profile production --platform android
 ```
 
 O arquivo `frontend/eas.json` ja esta configurado para gerar APK Android em `production`.
+
+Build local usado na versao 1.2:
+
+```bash
+cd frontend
+yarn install
+npx expo prebuild --platform android
+cd android
+gradlew.bat --no-daemon --max-workers=2 -PnewArchEnabled=true -PreactNativeArchitectures=arm64-v8a assembleRelease
+```
+
+Notas importantes:
+
+- O `newArchEnabled=true` precisa ficar ligado porque a versao atual do `react-native-reanimated` exige a nova arquitetura.
+- O APK local foi gerado para `arm64-v8a`, arquitetura dos celulares Android modernos. Para publicar na Play Store, prefira gerar um `.aab` ou configurar splits por arquitetura.
+- A chave de assinatura de release deve ficar fora do Git. Guarde o arquivo `.jks` e a senha com cuidado; sem eles, atualizacoes futuras assinadas com a mesma chave podem falhar.
 
 ## 7. Checklist final
 

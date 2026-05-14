@@ -12,6 +12,7 @@ export type Member = {
   email: string;
   weight: number;
   role: string;
+  permissions?: Record<string, boolean>;
   avatar_url?: string | null;
 };
 export type House = {
@@ -22,6 +23,7 @@ export type House = {
   owner_id: string;
   gamification_enabled: boolean;
   month_start_day: number;
+  permissions_catalog?: Record<string, string>;
   members: Member[];
 };
 
@@ -34,12 +36,13 @@ type Ctx = {
   isOnline: boolean;
   pendingSyncCount: number;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, name: string, password: string) => Promise<void>;
+  register: (email: string, name: string, password: string, acceptedLgpd?: boolean) => Promise<void>;
   logout: () => Promise<void>;
   setHouse: (h: House | null) => void;
   refreshHouses: () => Promise<House[]>;
   createHouse: (name: string) => Promise<House>;
   joinHouse: (code: string) => Promise<House>;
+  updateUserName: (name: string) => Promise<User>;
   syncNow: () => Promise<void>;
 };
 
@@ -109,10 +112,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await syncNow();
   }
 
-  async function register(email: string, name: string, password: string) {
+  async function register(email: string, name: string, password: string, acceptedLgpd = false) {
     const r = await api.post<{ token: string; user: User }>(
       "/auth/register",
-      { email, name, password },
+      { email, name, password, accepted_lgpd: acceptedLgpd },
       false
     );
     await AsyncStorage.setItem(STORAGE.TOKEN, r.token);
@@ -152,6 +155,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return h;
   }
 
+  async function updateUserName(name: string) {
+    const updated = await api.put<User>("/auth/me", { name });
+    await AsyncStorage.setItem(STORAGE.USER, JSON.stringify(updated));
+    setUser(updated);
+    return updated;
+  }
+
   function setHouse(h: House | null) {
     setHouseState(h);
     if (h) AsyncStorage.setItem(STORAGE.HOUSE, h.id);
@@ -186,6 +196,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshHouses: refreshHousesInternal,
         createHouse,
         joinHouse,
+        updateUserName,
         syncNow,
       }}
     >

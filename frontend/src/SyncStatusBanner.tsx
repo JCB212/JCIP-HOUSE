@@ -1,37 +1,40 @@
-import { StyleSheet, Text, TouchableOpacity } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "./AuthContext";
-import { colors } from "./theme";
+import { useAppTheme } from "./ThemeContext";
 
 export function SyncStatusBanner() {
   const { isOnline, pendingSyncCount, syncNow } = useAuth();
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
 
   if (isOnline && pendingSyncCount === 0) return null;
 
   const text = !isOnline
     ? pendingSyncCount > 0
-      ? `${pendingSyncCount} alteração${pendingSyncCount > 1 ? "es" : ""} salva${pendingSyncCount > 1 ? "s" : ""} no aparelho`
-      : "Modo offline"
+      ? `Falta de sincronização • ${pendingSyncCount} pendente${pendingSyncCount > 1 ? "s" : ""}`
+      : "Falta de sincronização"
     : `${pendingSyncCount} alteração${pendingSyncCount > 1 ? "es" : ""} aguardando sincronização`;
 
   return (
     <SafeAreaView pointerEvents="box-none" style={styles.wrap} edges={["top"]}>
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={() => {
-          if (isOnline) syncNow().catch(() => undefined);
-        }}
-        style={[styles.banner, isOnline ? styles.online : styles.offline]}
-      >
-        <Text style={[styles.text, isOnline ? styles.onlineText : styles.offlineText]}>
-          {text}
-        </Text>
-      </TouchableOpacity>
+      <View style={styles.line}>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => {
+            if (isOnline) syncNow().catch(() => undefined);
+          }}
+          style={styles.touch}
+        >
+          <Text style={[styles.text, isOnline ? styles.onlineText : styles.offlineText]}>{text}</Text>
+          {!isOnline && <Text style={styles.helper}>Conecte à internet para enviar os dados à nuvem.</Text>}
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   wrap: {
     left: 0,
     pointerEvents: "box-none",
@@ -40,31 +43,19 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 1000,
   },
-  banner: {
-    alignItems: "center",
-    marginHorizontal: 16,
-    marginTop: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
+  line: {
+    alignItems: "flex-end",
+    paddingHorizontal: 14,
+    paddingTop: 2,
   },
-  offline: {
-    backgroundColor: "#fffbeb",
-    borderColor: "#f59e0b",
-  },
-  online: {
-    backgroundColor: colors.neutralBg,
-    borderColor: colors.neutral,
-  },
+  touch: { alignItems: "flex-end" },
   text: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "900",
   },
-  offlineText: {
-    color: "#92400e",
-  },
+  offlineText: { color: colors.debt },
   onlineText: {
     color: colors.neutral,
   },
+  helper: { color: colors.debt, fontSize: 9, fontWeight: "700", marginTop: 1 },
 });

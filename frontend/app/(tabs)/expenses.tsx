@@ -13,10 +13,13 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api";
 import { useAuth } from "../../src/AuthContext";
-import { colors, formatBRL, radius, spacing } from "../../src/theme";
+import { formatBRL, radius, spacing } from "../../src/theme";
+import { useAppTheme } from "../../src/ThemeContext";
 
 export default function ExpensesTab() {
   const { house } = useAuth();
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const router = useRouter();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -65,7 +68,7 @@ export default function ExpensesTab() {
           style={styles.addBtn}
           onPress={() => router.push("/expense/new")}
         >
-          <Ionicons name="add" size={20} color="#fff" />
+          <Ionicons name="add" size={20} color={colors.primaryText} />
         </TouchableOpacity>
       </View>
       <FlatList
@@ -130,7 +133,7 @@ export default function ExpensesTab() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",

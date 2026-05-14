@@ -1,4 +1,4 @@
-# JCIP House Finance — PRD (v3.0)
+# JCIP House Finance — PRD (v1.2)
 
 ## Stack
 - **Backend**: Node.js 20 + Express + mysql2 + bcryptjs + jsonwebtoken
@@ -8,15 +8,17 @@
 - **Offline local**: SQLite no APK para cache e fila de sincronização
 
 ## Arquivos principais
-- `/app/backend-node/` — único app Node.js para deploy Hostinger
-- `/app/frontend/` — app Expo (gera APK via EAS Build)
-- `/app/database.sql` — 13 tabelas prontas pra importar no phpMyAdmin
-- `/app/APK_BUILD_INSTRUCTIONS.md` — guia completo passo-a-passo
-- `/app/OFFLINE_SYNC_ARCHITECTURE.md` — arquitetura offline-first para APK independente
+- `backend-node/` — único app Node.js para deploy Hostinger
+- `frontend/` — app mobile React Native/Expo que gera o APK
+- `database.sql` — schema completo pronto para importar no phpMyAdmin
+- `APK_BUILD_INSTRUCTIONS.md` — guia completo passo-a-passo
+- `OFFLINE_SYNC_ARCHITECTURE.md` — arquitetura offline-first para APK independente
 
 ## Funcionalidades
 - Auth JWT (register, login, /me)
+- Recuperação de senha por código enviado via SMTP
 - Casas compartilhadas com código de convite
+- Permissões por morador controladas pelo dono da casa
 - Pesos por membro (divisão por peso)
 - Dashboard com:
   - Seletor de meses (ciclos com start_day configurável 1-28)
@@ -36,14 +38,25 @@
 - Planos de contribuição mensais (auto-gerados)
 - Fechamento de mês com opção de carregar saldo
 - Acertos de conta (payments) que afetam dashboard
-- APK independente da Emergent, configurável via `EXPO_PUBLIC_BACKEND_URL`
+- Extrato consolidado da casa
+- Lista de compras compartilhada
+- Contas a pagar e a receber
+- Afazeres da casa com responsáveis, prazo e registro de conclusão
+- Modo claro/escuro com contraste revisado
+- Termo LGPD para programa teste
+- Lembretes locais para contas e afazeres
+- APK independente, configurável via `EXPO_PUBLIC_BACKEND_URL`
 - Cache local de respostas e fila local de mutações para sincronizar quando a internet voltar
 
-## Bugs corrigidos na v3
+## Correções da v1.2
 - House type com month_start_day (TypeScript strict)
 - Double-fetch no dashboard eliminado
 - android.package + ios.bundleIdentifier para EAS Build
 - Backend migrado para Node.js (limite de apps Hostinger)
+- Ícone do app substituído pelo ícone da casa JCIP-HOUSE
+- Banner offline trocado por aviso discreto de falta de sincronização
+- Recuperação de senha por e-mail
+- Permissões por tela/ação para dono e sub-dono
 
 ## Pendente (futuras iterações)
 - Gamificação (rankings, badges, níveis)
@@ -51,5 +64,4 @@
 - OCR de nota fiscal
 - Local-first completo por entidade (dashboard refletir lançamentos offline imediatamente)
 - Gráficos avançados (trends, previsões)
-- Push notifications para alertas
 - Cron job de geração automática de recorrentes

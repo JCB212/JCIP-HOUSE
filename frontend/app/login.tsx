@@ -10,15 +10,18 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { useRouter, Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/AuthContext";
-import { colors, radius, spacing } from "../src/theme";
+import { radius, spacing } from "../src/theme";
+import { useAppTheme } from "../src/ThemeContext";
 
 export default function Login() {
   const { login } = useAuth();
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
@@ -51,9 +54,7 @@ export default function Login() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.logoWrap}>
-            <View style={styles.logoCircle}>
-              <Ionicons name="home" size={32} color="#fff" />
-            </View>
+            <Image source={require("../assets/images/jcip-house-logo.png")} style={styles.logoImage} resizeMode="contain" />
             <Text style={styles.title}>JCIP House Finance</Text>
             <Text style={styles.subtitle}>Controle financeiro compartilhado</Text>
           </View>
@@ -89,11 +90,16 @@ export default function Login() {
               onPress={onSubmit}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.primaryText} />
               ) : (
                 <Text style={styles.btnPrimaryText}>Entrar</Text>
               )}
             </TouchableOpacity>
+            <Link href="/forgot-password" asChild>
+              <TouchableOpacity style={styles.forgotBtn}>
+                <Text style={styles.link}>Esqueceu a senha?</Text>
+              </TouchableOpacity>
+            </Link>
           </View>
 
           <View style={styles.footerRow}>
@@ -110,18 +116,10 @@ export default function Login() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   scroll: { padding: spacing.lg, flexGrow: 1, justifyContent: "center" },
   logoWrap: { alignItems: "center", marginBottom: spacing.xl },
-  logoCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.md,
-  },
+  logoImage: { width: 108, height: 108, borderRadius: 24, marginBottom: spacing.md },
   title: { fontSize: 26, fontWeight: "800", color: colors.textPrimary },
   subtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 4 },
   card: {
@@ -147,7 +145,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: spacing.lg,
   },
-  btnPrimaryText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  btnPrimaryText: { color: colors.primaryText, fontWeight: "700", fontSize: 16 },
+  forgotBtn: { alignItems: "center", paddingTop: spacing.md },
   footerRow: { flexDirection: "row", justifyContent: "center", marginTop: spacing.lg },
   footerText: { color: colors.textSecondary },
   link: { color: colors.neutral, fontWeight: "700" },

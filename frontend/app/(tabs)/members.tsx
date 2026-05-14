@@ -15,10 +15,13 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { api } from "../../src/api";
 import { useAuth } from "../../src/AuthContext";
-import { colors, formatBRL, radius, spacing } from "../../src/theme";
+import { formatBRL, radius, spacing } from "../../src/theme";
+import { useAppTheme } from "../../src/ThemeContext";
 
 export default function Members() {
   const { house, user } = useAuth();
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
@@ -68,7 +71,7 @@ export default function Members() {
           <Text testID="invite-code-text" style={styles.inviteCode}>{house?.invite_code}</Text>
           <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.md }}>
             <TouchableOpacity testID="btn-copy-code" style={styles.inviteBtn} onPress={copyCode}>
-              <Ionicons name="copy-outline" size={16} color="#fff" />
+              <Ionicons name="copy-outline" size={16} color={colors.primaryText} />
               <Text style={styles.inviteBtnText}>Copiar</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -76,7 +79,7 @@ export default function Members() {
               style={[styles.inviteBtn, { backgroundColor: colors.positive }]}
               onPress={shareCode}
             >
-              <Ionicons name="share-social" size={16} color="#fff" />
+              <Ionicons name="share-social" size={16} color={colors.primaryText} />
               <Text style={styles.inviteBtnText}>Compartilhar</Text>
             </TouchableOpacity>
           </View>
@@ -140,7 +143,7 @@ export default function Members() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   header: { padding: spacing.lg },
   title: { fontSize: 24, fontWeight: "800", color: colors.textPrimary },
   inviteCard: {
@@ -150,8 +153,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: spacing.lg,
   },
-  inviteLabel: { color: "#d6d3d1", fontSize: 12, fontWeight: "600", textTransform: "uppercase", letterSpacing: 2 },
-  inviteCode: { color: "#fff", fontSize: 36, fontWeight: "900", letterSpacing: 4, marginTop: 6 },
+  inviteLabel: { color: colors.primaryText, opacity: 0.75, fontSize: 12, fontWeight: "600", textTransform: "uppercase", letterSpacing: 2 },
+  inviteCode: { color: colors.primaryText, fontSize: 36, fontWeight: "900", letterSpacing: 4, marginTop: 6 },
   inviteBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -161,7 +164,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: radius.md,
   },
-  inviteBtnText: { color: "#fff", fontWeight: "700", fontSize: 13 },
+  inviteBtnText: { color: colors.primaryText, fontWeight: "700", fontSize: 13 },
   sectionTitle: { fontSize: 14, fontWeight: "700", color: colors.textSecondary, marginBottom: spacing.md, textTransform: "uppercase", letterSpacing: 1 },
   memberCard: {
     flexDirection: "row",

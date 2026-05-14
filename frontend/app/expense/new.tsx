@@ -8,13 +8,16 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api";
 import { useAuth } from "../../src/AuthContext";
-import { colors, formatBRL, radius, spacing } from "../../src/theme";
+import { formatBRL, radius, spacing } from "../../src/theme";
+import { useAppTheme } from "../../src/ThemeContext";
 
 type Cat = { id: string; name: string; icon: string; color: string; is_market_style: boolean };
 type Item = { name: string; quantity: string; unit_price: string };
 
 export default function NewExpense() {
   const { house, user } = useAuth();
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const router = useRouter();
   const [cats, setCats] = useState<Cat[]>([]);
   const [loading, setLoading] = useState(false);
@@ -245,7 +248,7 @@ export default function NewExpense() {
                   <TouchableOpacity key={m.user_id} style={styles.partRow}
                     onPress={() => setSelected({ ...selected, [m.user_id]: !isOn })}>
                     <View style={[styles.checkbox, isOn && styles.checkboxActive]}>
-                      {isOn && <Ionicons name="checkmark" size={14} color="#fff" />}
+                      {isOn && <Ionicons name="checkmark" size={14} color={colors.primaryText} />}
                     </View>
                     <Text style={{ flex: 1, color: colors.textPrimary, fontWeight: "600" }}>{m.name}</Text>
                     {splitType === "custom" && isOn ? (
@@ -270,7 +273,7 @@ export default function NewExpense() {
           <TouchableOpacity testID="new-expense-submit"
             style={[styles.submitBtn, loading && { opacity: 0.6 }]}
             disabled={loading} onPress={submit}>
-            {loading ? <ActivityIndicator color="#fff"/> :
+            {loading ? <ActivityIndicator color={colors.primaryText}/> :
               <Text style={styles.submitTxt}>Adicionar gasto</Text>}
           </TouchableOpacity>
         </ScrollView>
@@ -279,7 +282,7 @@ export default function NewExpense() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center",
     padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTitle: { fontSize: 17, fontWeight: "700", color: colors.textPrimary },
@@ -300,7 +303,7 @@ const styles = StyleSheet.create({
 
   itemsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end",
     marginTop: spacing.md, marginBottom: spacing.sm },
-  totalBadge: { backgroundColor: colors.primary, color: "#fff", paddingHorizontal: 10,
+  totalBadge: { backgroundColor: colors.primary, color: colors.primaryText, paddingHorizontal: 10,
     paddingVertical: 5, borderRadius: radius.pill, fontSize: 12, fontWeight: "800", overflow: "hidden" },
   itemRow: { flexDirection: "row", gap: 6, marginBottom: 6, alignItems: "center" },
   itemInput: { backgroundColor: colors.surface, borderRadius: radius.md, paddingHorizontal: 10,
@@ -320,7 +323,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipTxt: { color: colors.textSecondary, fontWeight: "600", fontSize: 13 },
-  chipTxtActive: { color: "#fff" },
+  chipTxtActive: { color: colors.primaryText },
   partRow: { flexDirection: "row", alignItems: "center", backgroundColor: colors.surface,
     padding: spacing.md, borderRadius: radius.lg, marginBottom: 6, borderWidth: 1,
     borderColor: colors.border, gap: spacing.md },
@@ -332,5 +335,5 @@ const styles = StyleSheet.create({
     paddingVertical: 8, fontSize: 14, color: colors.textPrimary, textAlign: "right" },
   submitBtn: { marginTop: spacing.xl, backgroundColor: colors.primary, paddingVertical: 16,
     borderRadius: radius.lg, alignItems: "center" },
-  submitTxt: { color: "#fff", fontWeight: "800", fontSize: 16 },
+  submitTxt: { color: colors.primaryText, fontWeight: "800", fontSize: 16 },
 });

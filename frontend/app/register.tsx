@@ -15,14 +15,18 @@ import { useRouter, Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/AuthContext";
-import { colors, radius, spacing } from "../src/theme";
+import { radius, spacing } from "../src/theme";
+import { useAppTheme } from "../src/ThemeContext";
 
 export default function Register() {
   const { register } = useAuth();
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
+  const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit() {
@@ -30,9 +34,13 @@ export default function Register() {
       Alert.alert("Atenção", "Preencha nome, email e senha (mín. 6 caracteres)");
       return;
     }
+    if (!accepted) {
+      Alert.alert("Atenção", "Leia e aceite o termo LGPD do programa teste.");
+      return;
+    }
     setLoading(true);
     try {
-      await register(email.trim(), name.trim(), pwd);
+      await register(email.trim(), name.trim(), pwd, accepted);
       router.replace("/");
     } catch (e: any) {
       Alert.alert("Erro", e.message || "Falha ao cadastrar");
@@ -92,6 +100,18 @@ export default function Register() {
               onChangeText={setPwd}
             />
 
+            <TouchableOpacity style={styles.consentRow} onPress={() => setAccepted((v) => !v)}>
+              <View style={[styles.checkbox, accepted && styles.checkboxActive]}>
+                {accepted && <Ionicons name="checkmark" size={16} color={colors.primaryText} />}
+              </View>
+              <Text style={styles.consentText}>
+                Li e aceito o termo LGPD do programa teste.{" "}
+                <Link href={"/terms-lgpd" as any} asChild>
+                  <Text style={styles.link}>Ver termo</Text>
+                </Link>
+              </Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               testID="register-submit-button"
               style={[styles.btnPrimary, loading && { opacity: 0.6 }]}
@@ -99,7 +119,7 @@ export default function Register() {
               onPress={onSubmit}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.primaryText} />
               ) : (
                 <Text style={styles.btnPrimaryText}>Criar conta</Text>
               )}
@@ -120,7 +140,7 @@ export default function Register() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   scroll: { padding: spacing.lg, flexGrow: 1, paddingTop: spacing.xxl },
   back: { marginBottom: spacing.md },
   title: { fontSize: 28, fontWeight: "800", color: colors.textPrimary },
@@ -148,7 +168,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: spacing.lg,
   },
-  btnPrimaryText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  btnPrimaryText: { color: colors.primaryText, fontWeight: "700", fontSize: 16 },
+  consentRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start", marginTop: spacing.md },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  checkboxActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  consentText: { flex: 1, color: colors.textSecondary, fontSize: 12, lineHeight: 18 },
   footerRow: { flexDirection: "row", justifyContent: "center", marginTop: spacing.lg },
   footerText: { color: colors.textSecondary },
   link: { color: colors.neutral, fontWeight: "700" },

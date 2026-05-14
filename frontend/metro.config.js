@@ -5,6 +5,8 @@ const { FileStore } = require('metro-cache');
 
 const config = getDefaultConfig(__dirname);
 
+config.resolver.assetExts = Array.from(new Set([...(config.resolver.assetExts || []), "wasm"]));
+
 // Use a stable on-disk store (shared across web/android)
 const root = process.env.METRO_CACHE_ROOT || path.join(__dirname, '.metro-cache');
 config.cacheStores = [

@@ -16,10 +16,13 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api";
 import { useAuth } from "../../src/AuthContext";
-import { colors, radius, spacing } from "../../src/theme";
+import { radius, spacing } from "../../src/theme";
+import { useAppTheme } from "../../src/ThemeContext";
 
 export default function NewContribution() {
   const { house, user } = useAuth();
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const router = useRouter();
 
   const [amount, setAmount] = useState("");
@@ -110,7 +113,7 @@ export default function NewContribution() {
             onPress={submit}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.primaryText} />
             ) : (
               <Text style={styles.submitTxt}>Registrar contribuição</Text>
             )}
@@ -121,7 +124,7 @@ export default function NewContribution() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -180,7 +183,7 @@ const styles = StyleSheet.create({
   },
   chipActive: { backgroundColor: colors.positive, borderColor: colors.positive },
   chipTxt: { color: colors.textSecondary, fontWeight: "600", fontSize: 13 },
-  chipTxtActive: { color: "#fff" },
+  chipTxtActive: { color: colors.primaryText },
   submitBtn: {
     marginTop: spacing.xl,
     backgroundColor: colors.positive,
@@ -188,5 +191,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     alignItems: "center",
   },
-  submitTxt: { color: "#fff", fontWeight: "800", fontSize: 16 },
+  submitTxt: { color: colors.primaryText, fontWeight: "800", fontSize: 16 },
 });
