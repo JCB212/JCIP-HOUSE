@@ -604,7 +604,15 @@ const TABLES = [
 ];
 
 async function ensureColumn(table, column, definition) {
-  const rows = await query(`SHOW COLUMNS FROM \`${table}\` LIKE ?`, [column]);
+  const rows = await query(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND COLUMN_NAME = ?
+     LIMIT 1`,
+    [table, column]
+  );
   if (!rows.length) {
     await query(`ALTER TABLE \`${table}\` ADD COLUMN ${definition}`);
     console.log(`[migrations] added ${table}.${column}`);
