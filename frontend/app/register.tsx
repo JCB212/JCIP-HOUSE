@@ -49,15 +49,23 @@ export default function Register() {
     }
   }
 
+  function socialSoon(provider: string) {
+    Alert.alert(
+      "Cadastro social",
+      `A estrutura para cadastro com ${provider} já está prevista. Para ativar de verdade, ainda precisamos cadastrar o app no provedor e colocar as chaves no .env.`
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
       >
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           <TouchableOpacity onPress={() => router.back()} style={styles.back}>
             <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
@@ -124,6 +132,21 @@ export default function Register() {
                 <Text style={styles.btnPrimaryText}>Criar conta</Text>
               )}
             </TouchableOpacity>
+
+            <View style={styles.separatorRow}>
+              <View style={styles.separator} />
+              <Text style={styles.separatorText}>ou</Text>
+              <View style={styles.separator} />
+            </View>
+
+            <TouchableOpacity style={styles.socialBtn} onPress={() => socialSoon("Google")}>
+              <Ionicons name="logo-google" size={18} color={colors.textPrimary} />
+              <Text style={styles.socialText}>Criar com Google</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.socialBtn} onPress={() => socialSoon("Facebook")}>
+              <Ionicons name="logo-facebook" size={18} color={colors.neutral} />
+              <Text style={styles.socialText}>Criar com Facebook</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.footerRow}>
@@ -182,6 +205,22 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   checkboxActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   consentText: { flex: 1, color: colors.textSecondary, fontSize: 12, lineHeight: 18 },
+  separatorRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.lg },
+  separator: { flex: 1, height: 1, backgroundColor: colors.border },
+  separatorText: { color: colors.textMuted, fontWeight: "700" },
+  socialBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingVertical: 13,
+    marginTop: spacing.sm,
+    backgroundColor: colors.bg,
+  },
+  socialText: { color: colors.textPrimary, fontWeight: "700" },
   footerRow: { flexDirection: "row", justifyContent: "center", marginTop: spacing.lg },
   footerText: { color: colors.textSecondary },
   link: { color: colors.neutral, fontWeight: "700" },

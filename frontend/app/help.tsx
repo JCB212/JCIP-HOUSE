@@ -9,58 +9,79 @@ const SECTIONS = [
   {
     icon: "home-outline",
     title: "Casa e moradores",
-    text: "Crie uma casa, convide moradores pelo código e acompanhe quanto cada pessoa pagou, quanto cabe para cada uma e o saldo final.",
+    text: "A casa é o grupo principal. Ela pode ser sua família, república, casal, escritório pequeno ou qualquer grupo que divide contas. O dono cria a casa e passa o código para os moradores entrarem. Cada morador aparece no resumo com quanto pagou, quanto contribuiu, quanto cabe para ele e se está devendo ou recebendo.",
   },
   {
     icon: "receipt-outline",
     title: "Gastos",
-    text: "Cadastre gastos coletivos ou individuais, escolha categoria, pagador e forma de divisão. Em compras de mercado, lance itens com quantidade e valor.",
+    text: "Use Gastos quando saiu dinheiro. Informe o nome do gasto, valor, data, quem pagou e a categoria. Um gasto coletivo é dividido entre moradores. Um gasto individual fica para uma pessoa só. Em compras de mercado, você pode lançar produtos com quantidade e valor para ter controle mais detalhado.",
   },
   {
     icon: "repeat-outline",
     title: "Recorrentes",
-    text: "Registre despesas fixas como aluguel, internet e luz. Também crie planos de contribuição mensal para gerar tudo com um toque.",
+    text: "Recorrentes são coisas que acontecem todo mês, como aluguel, internet, energia, condomínio ou uma contribuição fixa de cada pessoa. Você cadastra uma vez e depois gera no mês atual. Isso evita esquecer uma conta importante.",
   },
   {
     icon: "swap-horizontal-outline",
     title: "Acertos",
-    text: "O app calcula o menor número de transferências para equilibrar as dívidas da casa e permite registrar quando alguém quitou.",
+    text: "Acertos mostram quem precisa transferir dinheiro para quem. O app faz a conta para reduzir a quantidade de transferências. Quando uma pessoa pagar a outra, registre o acerto para o saldo ficar correto.",
   },
   {
     icon: "analytics-outline",
     title: "Extrato",
-    text: "Veja entradas, saídas e acertos da casa em uma linha do tempo. O dono escolhe quais moradores podem acessar essa área.",
+    text: "O extrato é a linha do tempo da casa. Ele junta entradas, saídas e acertos. Use quando quiser conferir o que aconteceu no mês, procurar um lançamento ou entender por que o saldo mudou.",
+  },
+  {
+    icon: "bar-chart-outline",
+    title: "Relatórios",
+    text: "Relatórios mostram tudo de forma resumida: quem pagou compras, quem cadastrou gastos, quem contribuiu, quem adicionou itens na lista de compras, quem marcou como comprado, quem fez afazeres e quais atividades aconteceram na casa.",
   },
   {
     icon: "wallet-outline",
     title: "Contas a pagar/receber",
-    text: "Cadastre vencimentos, fornecedores ou pessoas que devem pagar. Marque como pago quando a conta for quitada.",
+    text: "Contas a pagar são compromissos futuros, como uma fatura ou boleto. Contas a receber são valores que alguém precisa pagar para você ou para a casa. Cadastre vencimento, valor e pessoa/fornecedor. Depois marque como pago quando resolver.",
   },
   {
     icon: "cart-outline",
     title: "Lista de compras",
-    text: "Anote produtos, quantidades, unidade e marque o que já foi comprado durante a ida ao mercado.",
+    text: "A lista de compras ajuda antes e durante o mercado. Coloque produto, quantidade, unidade e observação. Durante a compra, marque o item quando pegar. O app registra quem criou e quem marcou.",
   },
   {
     icon: "checkbox-outline",
     title: "Afazeres da casa",
-    text: "O dono ou sub-dono cria tarefas, escolhe responsáveis e define dia e hora. Quem recebeu a tarefa marca quando fez, e o app registra data e horário.",
+    text: "Afazeres são tarefas da rotina: lavar pratos, tirar lixo, limpar banheiro, comprar água, organizar sala. O dono ou sub-dono cria a tarefa, escolhe uma ou mais pessoas, coloca dia e hora, e quem recebeu marca quando fez. O app guarda data e horário.",
   },
   {
     icon: "cloud-done-outline",
     title: "Offline e nuvem",
-    text: "Quando o celular estiver sem internet, alterações permitidas ficam salvas no aparelho. Assim que a conexão voltar, o app sincroniza com a API.",
+    text: "Sem internet, o app mostra Falta de sincronização em vermelho. Algumas ações ficam guardadas no celular e são enviadas quando a internet voltar. Ações muito sensíveis, como permissões e transferência de dono, exigem internet para proteger a casa.",
   },
   {
     icon: "shield-checkmark-outline",
     title: "Permissões",
-    text: "Em Configurações, o dono controla o que cada morador pode ver ou alterar: gastos, extrato, recorrentes, acertos, lista e configurações.",
+    text: "Em Configurações, o dono escolhe o que cada morador pode fazer. Dá para liberar ou bloquear gastos, extrato, relatórios, lista de compras, contas, afazeres, moradores e configurações. Sub-dono é uma pessoa de confiança que ajuda na administração.",
+  },
+  {
+    icon: "key-outline",
+    title: "Transferir a casa",
+    text: "O dono pode passar a casa para outro morador. Por segurança, o app pede dupla confirmação: escolher a pessoa, digitar o nome exato da casa e escrever TRANSFERIR. Faça isso só com alguém de confiança.",
   },
   {
     icon: "moon-outline",
     title: "Modo claro e escuro",
-    text: "A interface acompanha o modo do celular e usa a identidade JCIP-HOUSE: azul profundo, ciano e tons claros de apoio.",
+    text: "O modo claro usa fundo claro com letras escuras. O modo escuro usa fundo escuro com letras claras. Você troca pelo Perfil. A ideia é manter leitura boa em qualquer horário.",
   },
+];
+
+const DAILY_STEPS = [
+  "Crie a casa e convide os moradores pelo código.",
+  "Confira as permissões de cada pessoa em Configurações.",
+  "Cadastre gastos sempre que alguém pagar algo.",
+  "Use Recorrentes para contas fixas e contribuições mensais.",
+  "Use Lista de compras antes de ir ao mercado.",
+  "Use Afazeres para dividir tarefas da rotina.",
+  "Veja Acertos quando chegar a hora de transferir dinheiro.",
+  "Abra Relatórios para conferir quem fez cada ação.",
 ];
 
 export default function Help() {
@@ -81,7 +102,18 @@ export default function Help() {
         <View style={styles.hero}>
           <Image source={require("../assets/images/jcip-house-logo.png")} style={styles.logo} resizeMode="contain" />
           <Text style={styles.title}>Tutorial JCIP House</Text>
-          <Text style={styles.subtitle}>Guia rápido para organizar as finanças da casa e da vida pessoal.</Text>
+          <Text style={styles.subtitle}>Guia simples para organizar finanças, compras e tarefas da casa.</Text>
+          <TouchableOpacity style={styles.tutorialBtn} onPress={() => router.push("/tutorial" as any)}>
+            <Ionicons name="game-controller-outline" size={18} color={colors.primaryText} />
+            <Text style={styles.tutorialBtnText}>Abrir tutorial passo a passo</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.stepCard}>
+          <Text style={styles.stepTitle}>Ordem recomendada para começar</Text>
+          {DAILY_STEPS.map((step, index) => (
+            <Text key={step} style={styles.stepText}>{index + 1}. {step}</Text>
+          ))}
         </View>
 
         {SECTIONS.map((item) => (
@@ -124,6 +156,28 @@ const createStyles = (colors: any) => StyleSheet.create({
   logo: { width: 104, height: 104, borderRadius: 24 },
   title: { color: colors.textPrimary, fontSize: 24, fontWeight: "900", marginTop: spacing.md },
   subtitle: { color: colors.textSecondary, textAlign: "center", marginTop: spacing.xs, lineHeight: 20 },
+  tutorialBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
+    paddingVertical: 13,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.md,
+  },
+  tutorialBtnText: { color: colors.primaryText, fontWeight: "900" },
+  stepCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  stepTitle: { color: colors.textPrimary, fontSize: 16, fontWeight: "900", marginBottom: spacing.sm },
+  stepText: { color: colors.textSecondary, lineHeight: 22, marginTop: 2 },
   card: {
     flexDirection: "row",
     gap: spacing.md,

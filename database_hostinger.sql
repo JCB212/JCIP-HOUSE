@@ -1,49 +1,17 @@
 -- =====================================================================
--- JCIP House Finance - SQL COMPLETO PARA HOSTINGER / phpMyAdmin
--- Banco zerado: u251982692_jciphouse
+-- JCIP House Finance - SQL SEGURO PARA HOSTINGER / phpMyAdmin
+-- Pode ser usado em banco de producao: nao apaga dados existentes
 -- Multi-tenant por casa/organizacao (tabela houses)
 -- Compatibilidade: MySQL/MariaDB Hostinger
 -- Observacoes:
 -- 1. Selecione o banco no phpMyAdmin antes de importar.
 -- 2. Nao coloque senha do banco dentro do APK. Use a API Node.js.
--- 3. Este arquivo remove tabelas antigas do mesmo projeto e recria tudo.
+-- 3. Este arquivo usa CREATE TABLE IF NOT EXISTS e ALTER seguro.
+-- 4. Nunca rode comandos de exclusao em banco de producao com dados reais.
 -- =====================================================================
 
 SET NAMES utf8mb4;
-SET FOREIGN_KEY_CHECKS = 0;
-
-DROP TABLE IF EXISTS `activity_logs`;
-DROP TABLE IF EXISTS `idempotency_keys`;
-DROP TABLE IF EXISTS `sync_cursors`;
-DROP TABLE IF EXISTS `sync_events`;
-DROP TABLE IF EXISTS `reminders`;
-DROP TABLE IF EXISTS `ai_insights`;
-DROP TABLE IF EXISTS `document_extractions`;
-DROP TABLE IF EXISTS `documents`;
-DROP TABLE IF EXISTS `house_chore_assignments`;
-DROP TABLE IF EXISTS `house_chores`;
-DROP TABLE IF EXISTS `shopping_list_items`;
-DROP TABLE IF EXISTS `cash_transactions`;
-DROP TABLE IF EXISTS `bill_payments`;
-DROP TABLE IF EXISTS `bills`;
-DROP TABLE IF EXISTS `budget_categories`;
-DROP TABLE IF EXISTS `budgets`;
-DROP TABLE IF EXISTS `financial_accounts`;
-DROP TABLE IF EXISTS `user_devices`;
-DROP TABLE IF EXISTS `contribution_plans`;
-DROP TABLE IF EXISTS `recurring_expenses`;
-DROP TABLE IF EXISTS `payments`;
-DROP TABLE IF EXISTS `contributions`;
-DROP TABLE IF EXISTS `expense_items`;
-DROP TABLE IF EXISTS `expense_participants`;
-DROP TABLE IF EXISTS `expenses`;
-DROP TABLE IF EXISTS `months`;
-DROP TABLE IF EXISTS `categories`;
-DROP TABLE IF EXISTS `password_reset_tokens`;
-DROP TABLE IF EXISTS `user_consents`;
-DROP TABLE IF EXISTS `house_members`;
-DROP TABLE IF EXISTS `houses`;
-DROP TABLE IF EXISTS `users`;
+SET FOREIGN_KEY_CHECKS = 1;
 
 CREATE TABLE IF NOT EXISTS `users` (
     id VARCHAR(36) PRIMARY KEY,
@@ -542,7 +510,183 @@ CREATE TABLE IF NOT EXISTS `activity_logs` (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `user_oauth_accounts` (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    provider VARCHAR(40) NOT NULL,
+    provider_user_id VARCHAR(191) NOT NULL,
+    email VARCHAR(255) NULL,
+    name VARCHAR(120) NULL,
+    avatar_url VARCHAR(500) NULL,
+    created_at DATETIME NOT NULL,
+    last_login_at DATETIME NULL,
+    UNIQUE KEY uq_oauth_provider_user (provider, provider_user_id),
+    INDEX idx_oauth_user (user_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `house_ownership_transfers` (
+    id VARCHAR(36) PRIMARY KEY,
+    house_id VARCHAR(36) NOT NULL,
+    previous_owner_id VARCHAR(36) NOT NULL,
+    new_owner_id VARCHAR(36) NOT NULL,
+    confirmed_by_user_id VARCHAR(36) NOT NULL,
+    confirmation_text VARCHAR(40) NOT NULL,
+    created_at DATETIME NOT NULL,
+    INDEX idx_owner_transfer_house (house_id, created_at),
+    FOREIGN KEY (house_id) REFERENCES houses(id) ON DELETE CASCADE,
+    FOREIGN KEY (previous_owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (new_owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (confirmed_by_user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `subscription_plans` (
+    id VARCHAR(36) PRIMARY KEY,
+    code VARCHAR(60) UNIQUE NOT NULL,
+    name VARCHAR(120) NOT NULL,
+    description TEXT NULL,
+    price_monthly DOUBLE NOT NULL DEFAULT 0,
+    price_yearly DOUBLE NOT NULL DEFAULT 0,
+    currency VARCHAR(6) NOT NULL DEFAULT 'BRL',
+    max_houses INT NULL,
+    max_members_per_house INT NULL,
+    features_json LONGTEXT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `user_subscriptions` (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    plan_id VARCHAR(36) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'trial',
+    started_at DATETIME NOT NULL,
+    current_period_start DATETIME NULL,
+    current_period_end DATETIME NULL,
+    cancelled_at DATETIME NULL,
+    provider VARCHAR(60) NULL,
+    provider_subscription_id VARCHAR(191) NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NULL,
+    INDEX idx_subscription_user (user_id),
+    INDEX idx_subscription_status (status),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (plan_id) REFERENCES subscription_plans(id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `landing_leads` (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(120) NULL,
+    email VARCHAR(255) NULL,
+    phone VARCHAR(40) NULL,
+    message TEXT NULL,
+    source VARCHAR(80) NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'new',
+    created_at DATETIME NOT NULL,
+    INDEX idx_landing_leads_status (status, created_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `app_releases` (
+    id VARCHAR(36) PRIMARY KEY,
+    version VARCHAR(40) NOT NULL,
+    version_code INT NOT NULL,
+    platform VARCHAR(30) NOT NULL DEFAULT 'android',
+    title VARCHAR(160) NOT NULL,
+    changelog TEXT NULL,
+    download_url VARCHAR(500) NULL,
+    file_sha256 VARCHAR(128) NULL,
+    is_mandatory TINYINT(1) NOT NULL DEFAULT 0,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    published_at DATETIME NULL,
+    created_at DATETIME NOT NULL,
+    INDEX idx_app_releases_platform_active (platform, is_active, version_code)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Ajustes seguros para bancos que ja existiam antes desta versao.
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'houses' AND COLUMN_NAME = 'gamification_enabled') = 0, 'ALTER TABLE `houses` ADD COLUMN `gamification_enabled` TINYINT(1) NOT NULL DEFAULT 1 AFTER `owner_id`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'houses' AND COLUMN_NAME = 'month_start_day') = 0, 'ALTER TABLE `houses` ADD COLUMN `month_start_day` INT NOT NULL DEFAULT 1 AFTER `gamification_enabled`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'house_members' AND COLUMN_NAME = 'role') = 0, 'ALTER TABLE `house_members` ADD COLUMN `role` VARCHAR(20) NOT NULL DEFAULT ''member'' AFTER `weight`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'house_members' AND COLUMN_NAME = 'permissions_json') = 0, 'ALTER TABLE `house_members` ADD COLUMN `permissions_json` LONGTEXT NULL AFTER `role`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'categories' AND COLUMN_NAME = 'parent_id') = 0, 'ALTER TABLE `categories` ADD COLUMN `parent_id` VARCHAR(36) NULL AFTER `house_id`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'categories' AND COLUMN_NAME = 'is_market_style') = 0, 'ALTER TABLE `categories` ADD COLUMN `is_market_style` TINYINT(1) NOT NULL DEFAULT 0 AFTER `color`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'expenses' AND COLUMN_NAME = 'month_id') = 0, 'ALTER TABLE `expenses` ADD COLUMN `month_id` VARCHAR(36) NULL AFTER `house_id`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'expenses' AND COLUMN_NAME = 'expense_type') = 0, 'ALTER TABLE `expenses` ADD COLUMN `expense_type` VARCHAR(20) NOT NULL DEFAULT ''collective'' AFTER `expense_date`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'expenses' AND COLUMN_NAME = 'split_type') = 0, 'ALTER TABLE `expenses` ADD COLUMN `split_type` VARCHAR(20) NOT NULL DEFAULT ''equal'' AFTER `expense_type`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'expenses' AND COLUMN_NAME = 'has_items') = 0, 'ALTER TABLE `expenses` ADD COLUMN `has_items` TINYINT(1) NOT NULL DEFAULT 0 AFTER `split_type`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'expenses' AND COLUMN_NAME = 'is_paid') = 0, 'ALTER TABLE `expenses` ADD COLUMN `is_paid` TINYINT(1) NOT NULL DEFAULT 1 AFTER `has_items`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'expenses' AND COLUMN_NAME = 'is_recurring_instance') = 0, 'ALTER TABLE `expenses` ADD COLUMN `is_recurring_instance` TINYINT(1) NOT NULL DEFAULT 0 AFTER `is_paid`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'expenses' AND COLUMN_NAME = 'recurring_source_id') = 0, 'ALTER TABLE `expenses` ADD COLUMN `recurring_source_id` VARCHAR(36) NULL AFTER `is_recurring_instance`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'expenses' AND COLUMN_NAME = 'notes') = 0, 'ALTER TABLE `expenses` ADD COLUMN `notes` TEXT NULL AFTER `recurring_source_id`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'expenses' AND COLUMN_NAME = 'created_by_user_id') = 0, 'ALTER TABLE `expenses` ADD COLUMN `created_by_user_id` VARCHAR(36) NULL AFTER `notes`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'contributions' AND COLUMN_NAME = 'month_id') = 0, 'ALTER TABLE `contributions` ADD COLUMN `month_id` VARCHAR(36) NULL AFTER `house_id`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'contributions' AND COLUMN_NAME = 'description') = 0, 'ALTER TABLE `contributions` ADD COLUMN `description` VARCHAR(255) NULL AFTER `amount`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'contributions' AND COLUMN_NAME = 'is_auto') = 0, 'ALTER TABLE `contributions` ADD COLUMN `is_auto` TINYINT(1) NOT NULL DEFAULT 0 AFTER `contribution_date`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'contributions' AND COLUMN_NAME = 'plan_id') = 0, 'ALTER TABLE `contributions` ADD COLUMN `plan_id` VARCHAR(36) NULL AFTER `is_auto`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'contributions' AND COLUMN_NAME = 'created_by_user_id') = 0, 'ALTER TABLE `contributions` ADD COLUMN `created_by_user_id` VARCHAR(36) NULL AFTER `plan_id`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'payments' AND COLUMN_NAME = 'note') = 0, 'ALTER TABLE `payments` ADD COLUMN `note` VARCHAR(255) NULL AFTER `amount`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'payments' AND COLUMN_NAME = 'created_by_user_id') = 0, 'ALTER TABLE `payments` ADD COLUMN `created_by_user_id` VARCHAR(36) NULL AFTER `payment_date`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'recurring_expenses' AND COLUMN_NAME = 'expense_type') = 0, 'ALTER TABLE `recurring_expenses` ADD COLUMN `expense_type` VARCHAR(20) NOT NULL DEFAULT ''collective'' AFTER `day_of_month`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'recurring_expenses' AND COLUMN_NAME = 'split_type') = 0, 'ALTER TABLE `recurring_expenses` ADD COLUMN `split_type` VARCHAR(20) NOT NULL DEFAULT ''equal'' AFTER `expense_type`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'recurring_expenses' AND COLUMN_NAME = 'last_generated_month') = 0, 'ALTER TABLE `recurring_expenses` ADD COLUMN `last_generated_month` VARCHAR(7) NULL AFTER `is_active`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'shopping_list_items' AND COLUMN_NAME = 'checked_by_user_id') = 0, 'ALTER TABLE `shopping_list_items` ADD COLUMN `checked_by_user_id` VARCHAR(36) NULL AFTER `is_checked`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'shopping_list_items' AND COLUMN_NAME = 'checked_at') = 0, 'ALTER TABLE `shopping_list_items` ADD COLUMN `checked_at` DATETIME NULL AFTER `checked_by_user_id`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 SET FOREIGN_KEY_CHECKS = 1;
 
--- Total de tabelas: 27
--- Tabelas: users, houses, house_members, password_reset_tokens, user_consents, categories, months, expenses, expense_participants, expense_items, contributions, payments, recurring_expenses, contribution_plans, user_devices, financial_accounts, budgets, budget_categories, bills, bill_payments, cash_transactions, shopping_list_items, house_chores, house_chore_assignments, documents, document_extractions, ai_insights, reminders, sync_events, sync_cursors, idempotency_keys, activity_logs
+-- Total de tabelas principais: 38
+-- Atualizacao segura: nao usa comandos de exclusao e preserva informacoes existentes.

@@ -38,7 +38,7 @@ export default function Onboarding() {
         if (code.trim().length < 4) throw new Error("Informe um código válido");
         await joinHouse(code.trim().toUpperCase());
       }
-      router.replace("/(tabs)");
+      router.replace("/tutorial");
     } catch (e: any) {
       Alert.alert("Erro", e.message || "Falha");
     } finally {
@@ -48,8 +48,8 @@ export default function Onboarding() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <View style={styles.headerRow}>
             <View style={styles.iconBadge}>
               <Ionicons name="home" size={22} color={colors.primaryText} />

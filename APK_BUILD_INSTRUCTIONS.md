@@ -24,11 +24,11 @@ O APK nao deve conectar direto no MySQL. As credenciais do banco ficam somente n
 1. No hPanel, abra o `phpMyAdmin` do banco criado.
 2. Selecione o banco `u251982692_jciphouse`.
 3. Clique em `Importar`.
-4. Selecione o arquivo `database_hostinger.sql`.
+4. Selecione o arquivo `database_update_v1_2_production.sql` ou `database_hostinger.sql`.
 5. Execute a importacao.
-6. Ao terminar, o banco deve ter 27 tabelas.
+6. Ao terminar, o banco deve manter seus dados antigos e criar apenas o que estiver faltando.
 
-Use `database_hostinger.sql` para a Hostinger. Ele foi preparado para MySQL/MariaDB e phpMyAdmin.
+Use `database_update_v1_2_production.sql` quando o banco ja tem dados. Ele foi preparado para MySQL/MariaDB e phpMyAdmin sem comandos de exclusao. O arquivo `database_hostinger.sql` tambem esta seguro nesta versao.
 
 ## 3. Publicar a API Node.js pela tela da Hostinger
 
@@ -77,9 +77,18 @@ AUTH_RATE_LIMIT_MAX=30
 SMTP_HOST=smtp.hostinger.com
 SMTP_PORT=465
 SMTP_SECURE=true
-SMTP_USER=suporte@seu-dominio.com.br
+SMTP_USER=suporte@marqi.com.br
 SMTP_PASSWORD=COLE_A_SENHA_DO_EMAIL_AQUI
-SMTP_FROM="JCIP House <suporte@seu-dominio.com.br>"
+SMTP_FROM="JCIP House <suporte@marqi.com.br>"
+RESET_CODE_MINUTES=30
+
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+FACEBOOK_APP_ID=
+FACEBOOK_APP_SECRET=
+
+PUBLIC_APP_DOWNLOAD_URL=
+PUBLIC_LANDING_URL=
 ```
 
 Sobre `PORT`:
@@ -128,6 +137,8 @@ No projeto mobile, crie/edite `frontend/.env`:
 
 ```env
 EXPO_PUBLIC_BACKEND_URL=https://api.seudominio.com
+EXPO_PUBLIC_GOOGLE_CLIENT_ID=
+EXPO_PUBLIC_FACEBOOK_APP_ID=
 ```
 
 Nao coloque host, usuario ou senha do MySQL no APK.

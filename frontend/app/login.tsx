@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useRouter, Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/AuthContext";
 import { radius, spacing } from "../src/theme";
 import { useAppTheme } from "../src/ThemeContext";
@@ -43,15 +44,23 @@ export default function Login() {
     }
   }
 
+  function socialSoon(provider: string) {
+    Alert.alert(
+      "Login social",
+      `A estrutura para entrar com ${provider} já está prevista. Para ativar de verdade, ainda precisamos cadastrar o app no provedor e colocar as chaves no .env.`
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
       >
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           <View style={styles.logoWrap}>
             <Image source={require("../assets/images/jcip-house-logo.png")} style={styles.logoImage} resizeMode="contain" />
@@ -100,6 +109,21 @@ export default function Login() {
                 <Text style={styles.link}>Esqueceu a senha?</Text>
               </TouchableOpacity>
             </Link>
+
+            <View style={styles.separatorRow}>
+              <View style={styles.separator} />
+              <Text style={styles.separatorText}>ou</Text>
+              <View style={styles.separator} />
+            </View>
+
+            <TouchableOpacity style={styles.socialBtn} onPress={() => socialSoon("Google")}>
+              <Ionicons name="logo-google" size={18} color={colors.textPrimary} />
+              <Text style={styles.socialText}>Continuar com Google</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.socialBtn} onPress={() => socialSoon("Facebook")}>
+              <Ionicons name="logo-facebook" size={18} color={colors.neutral} />
+              <Text style={styles.socialText}>Continuar com Facebook</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.footerRow}>
@@ -147,6 +171,22 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   btnPrimaryText: { color: colors.primaryText, fontWeight: "700", fontSize: 16 },
   forgotBtn: { alignItems: "center", paddingTop: spacing.md },
+  separatorRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.lg },
+  separator: { flex: 1, height: 1, backgroundColor: colors.border },
+  separatorText: { color: colors.textMuted, fontWeight: "700" },
+  socialBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingVertical: 13,
+    marginTop: spacing.sm,
+    backgroundColor: colors.bg,
+  },
+  socialText: { color: colors.textPrimary, fontWeight: "700" },
   footerRow: { flexDirection: "row", justifyContent: "center", marginTop: spacing.lg },
   footerText: { color: colors.textSecondary },
   link: { color: colors.neutral, fontWeight: "700" },

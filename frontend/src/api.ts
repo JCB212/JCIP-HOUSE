@@ -26,6 +26,8 @@ function canQueueOfflineMutation(path: string) {
   if (path === "/houses" || path === "/houses/join") return false;
   if (/^\/houses\/[^/]+\/settings$/.test(path)) return false;
   if (/^\/houses\/[^/]+\/members\/weight$/.test(path)) return false;
+  if (/^\/houses\/[^/]+\/members\/[^/]+\/permissions$/.test(path)) return false;
+  if (/^\/houses\/[^/]+\/transfer-owner$/.test(path)) return false;
   return true;
 }
 

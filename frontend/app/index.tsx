@@ -3,6 +3,7 @@ import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "../src/AuthContext";
 import { useAppTheme } from "../src/ThemeContext";
+import { hasSeenTutorial } from "../src/tutorialState";
 
 export default function Index() {
   const { user, house, loading } = useAuth();
@@ -12,13 +13,21 @@ export default function Index() {
 
   useEffect(() => {
     if (loading) return;
-    if (!user) {
-      router.replace("/login");
-    } else if (!house) {
-      router.replace("/onboarding");
-    } else {
-      router.replace("/(tabs)");
-    }
+    let active = true;
+    (async () => {
+      if (!user) {
+        router.replace("/login");
+      } else if (!house) {
+        router.replace("/onboarding");
+      } else if (!(await hasSeenTutorial()) && active) {
+        router.replace("/tutorial");
+      } else {
+        router.replace("/(tabs)");
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, [user, house, loading, router]);
 
   return (

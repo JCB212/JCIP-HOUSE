@@ -18,6 +18,7 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": false,
+      "softwareKeyboardLayoutMode": "pan",
       "package": "com.jcip.housefinance",
       "versionCode": 3,
       "permissions": [],

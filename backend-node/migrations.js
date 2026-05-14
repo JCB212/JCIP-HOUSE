@@ -109,13 +109,15 @@ const TABLES = [
     is_recurring_instance TINYINT(1) NOT NULL DEFAULT 0,
     recurring_source_id VARCHAR(36) NULL,
     notes TEXT NULL,
+    created_by_user_id VARCHAR(36) NULL,
     created_at DATETIME NOT NULL,
     INDEX idx_expense_house_date (house_id, expense_date),
     INDEX idx_expense_month (month_id),
     FOREIGN KEY (house_id) REFERENCES houses(id) ON DELETE CASCADE,
     FOREIGN KEY (month_id) REFERENCES months(id) ON DELETE SET NULL,
     FOREIGN KEY (payer_id) REFERENCES users(id),
-    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
   ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
   `CREATE TABLE IF NOT EXISTS expense_participants (
@@ -148,12 +150,14 @@ const TABLES = [
     contribution_date DATE NOT NULL,
     is_auto TINYINT(1) NOT NULL DEFAULT 0,
     plan_id VARCHAR(36) NULL,
+    created_by_user_id VARCHAR(36) NULL,
     created_at DATETIME NOT NULL,
     INDEX idx_contrib_house (house_id),
     INDEX idx_contrib_month (month_id),
     FOREIGN KEY (house_id) REFERENCES houses(id) ON DELETE CASCADE,
     FOREIGN KEY (month_id) REFERENCES months(id) ON DELETE SET NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
   ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
   `CREATE TABLE IF NOT EXISTS payments (
@@ -164,11 +168,13 @@ const TABLES = [
     amount DOUBLE NOT NULL,
     note VARCHAR(255) NULL,
     payment_date DATE NOT NULL,
+    created_by_user_id VARCHAR(36) NULL,
     created_at DATETIME NOT NULL,
     INDEX idx_pay_house (house_id),
     FOREIGN KEY (house_id) REFERENCES houses(id) ON DELETE CASCADE,
     FOREIGN KEY (from_user_id) REFERENCES users(id),
-    FOREIGN KEY (to_user_id) REFERENCES users(id)
+    FOREIGN KEY (to_user_id) REFERENCES users(id),
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
   ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
   `CREATE TABLE IF NOT EXISTS recurring_expenses (
@@ -344,11 +350,14 @@ const TABLES = [
     unit VARCHAR(30) NULL,
     notes VARCHAR(255) NULL,
     is_checked TINYINT(1) NOT NULL DEFAULT 0,
+    checked_by_user_id VARCHAR(36) NULL,
+    checked_at DATETIME NULL,
     created_at DATETIME NOT NULL,
     updated_at DATETIME NULL,
     INDEX idx_shopping_house_checked (house_id, is_checked),
     FOREIGN KEY (house_id) REFERENCES houses(id) ON DELETE CASCADE,
-    FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (checked_by_user_id) REFERENCES users(id) ON DELETE SET NULL
   ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
   `CREATE TABLE IF NOT EXISTS house_chores (
@@ -498,6 +507,100 @@ const TABLES = [
     FOREIGN KEY (house_id) REFERENCES houses(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
   ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS user_oauth_accounts (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    provider VARCHAR(40) NOT NULL,
+    provider_user_id VARCHAR(191) NOT NULL,
+    email VARCHAR(255) NULL,
+    name VARCHAR(120) NULL,
+    avatar_url VARCHAR(500) NULL,
+    created_at DATETIME NOT NULL,
+    last_login_at DATETIME NULL,
+    UNIQUE KEY uq_oauth_provider_user (provider, provider_user_id),
+    INDEX idx_oauth_user (user_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS house_ownership_transfers (
+    id VARCHAR(36) PRIMARY KEY,
+    house_id VARCHAR(36) NOT NULL,
+    previous_owner_id VARCHAR(36) NOT NULL,
+    new_owner_id VARCHAR(36) NOT NULL,
+    confirmed_by_user_id VARCHAR(36) NOT NULL,
+    confirmation_text VARCHAR(40) NOT NULL,
+    created_at DATETIME NOT NULL,
+    INDEX idx_owner_transfer_house (house_id, created_at),
+    FOREIGN KEY (house_id) REFERENCES houses(id) ON DELETE CASCADE,
+    FOREIGN KEY (previous_owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (new_owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (confirmed_by_user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS subscription_plans (
+    id VARCHAR(36) PRIMARY KEY,
+    code VARCHAR(60) UNIQUE NOT NULL,
+    name VARCHAR(120) NOT NULL,
+    description TEXT NULL,
+    price_monthly DOUBLE NOT NULL DEFAULT 0,
+    price_yearly DOUBLE NOT NULL DEFAULT 0,
+    currency VARCHAR(6) NOT NULL DEFAULT 'BRL',
+    max_houses INT NULL,
+    max_members_per_house INT NULL,
+    features_json LONGTEXT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NULL
+  ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS user_subscriptions (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    plan_id VARCHAR(36) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'trial',
+    started_at DATETIME NOT NULL,
+    current_period_start DATETIME NULL,
+    current_period_end DATETIME NULL,
+    cancelled_at DATETIME NULL,
+    provider VARCHAR(60) NULL,
+    provider_subscription_id VARCHAR(191) NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NULL,
+    INDEX idx_subscription_user (user_id),
+    INDEX idx_subscription_status (status),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (plan_id) REFERENCES subscription_plans(id)
+  ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS landing_leads (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(120) NULL,
+    email VARCHAR(255) NULL,
+    phone VARCHAR(40) NULL,
+    message TEXT NULL,
+    source VARCHAR(80) NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'new',
+    created_at DATETIME NOT NULL,
+    INDEX idx_landing_leads_status (status, created_at)
+  ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_releases (
+    id VARCHAR(36) PRIMARY KEY,
+    version VARCHAR(40) NOT NULL,
+    version_code INT NOT NULL,
+    platform VARCHAR(30) NOT NULL DEFAULT 'android',
+    title VARCHAR(160) NOT NULL,
+    changelog TEXT NULL,
+    download_url VARCHAR(500) NULL,
+    file_sha256 VARCHAR(128) NULL,
+    is_mandatory TINYINT(1) NOT NULL DEFAULT 0,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    published_at DATETIME NULL,
+    created_at DATETIME NOT NULL,
+    INDEX idx_app_releases_platform_active (platform, is_active, version_code)
+  ) ENGINE=InnoDB CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
 async function ensureColumn(table, column, definition) {
@@ -512,7 +615,33 @@ async function runMigrations() {
   for (const sql of TABLES) {
     await query(sql);
   }
+  await ensureColumn("houses", "gamification_enabled", "gamification_enabled TINYINT(1) NOT NULL DEFAULT 1 AFTER owner_id");
+  await ensureColumn("houses", "month_start_day", "month_start_day INT NOT NULL DEFAULT 1 AFTER gamification_enabled");
+  await ensureColumn("house_members", "role", "role VARCHAR(20) NOT NULL DEFAULT 'member' AFTER weight");
   await ensureColumn("house_members", "permissions_json", "permissions_json LONGTEXT NULL AFTER role");
+  await ensureColumn("categories", "parent_id", "parent_id VARCHAR(36) NULL AFTER house_id");
+  await ensureColumn("categories", "is_market_style", "is_market_style TINYINT(1) NOT NULL DEFAULT 0 AFTER color");
+  await ensureColumn("expenses", "month_id", "month_id VARCHAR(36) NULL AFTER house_id");
+  await ensureColumn("expenses", "expense_type", "expense_type VARCHAR(20) NOT NULL DEFAULT 'collective' AFTER expense_date");
+  await ensureColumn("expenses", "split_type", "split_type VARCHAR(20) NOT NULL DEFAULT 'equal' AFTER expense_type");
+  await ensureColumn("expenses", "has_items", "has_items TINYINT(1) NOT NULL DEFAULT 0 AFTER split_type");
+  await ensureColumn("expenses", "is_paid", "is_paid TINYINT(1) NOT NULL DEFAULT 1 AFTER has_items");
+  await ensureColumn("expenses", "is_recurring_instance", "is_recurring_instance TINYINT(1) NOT NULL DEFAULT 0 AFTER is_paid");
+  await ensureColumn("expenses", "recurring_source_id", "recurring_source_id VARCHAR(36) NULL AFTER is_recurring_instance");
+  await ensureColumn("expenses", "notes", "notes TEXT NULL AFTER recurring_source_id");
+  await ensureColumn("expenses", "created_by_user_id", "created_by_user_id VARCHAR(36) NULL AFTER notes");
+  await ensureColumn("contributions", "month_id", "month_id VARCHAR(36) NULL AFTER house_id");
+  await ensureColumn("contributions", "description", "description VARCHAR(255) NULL AFTER amount");
+  await ensureColumn("contributions", "is_auto", "is_auto TINYINT(1) NOT NULL DEFAULT 0 AFTER contribution_date");
+  await ensureColumn("contributions", "plan_id", "plan_id VARCHAR(36) NULL AFTER is_auto");
+  await ensureColumn("contributions", "created_by_user_id", "created_by_user_id VARCHAR(36) NULL AFTER plan_id");
+  await ensureColumn("payments", "note", "note VARCHAR(255) NULL AFTER amount");
+  await ensureColumn("payments", "created_by_user_id", "created_by_user_id VARCHAR(36) NULL AFTER payment_date");
+  await ensureColumn("recurring_expenses", "expense_type", "expense_type VARCHAR(20) NOT NULL DEFAULT 'collective' AFTER day_of_month");
+  await ensureColumn("recurring_expenses", "split_type", "split_type VARCHAR(20) NOT NULL DEFAULT 'equal' AFTER expense_type");
+  await ensureColumn("recurring_expenses", "last_generated_month", "last_generated_month VARCHAR(7) NULL AFTER is_active");
+  await ensureColumn("shopping_list_items", "checked_by_user_id", "checked_by_user_id VARCHAR(36) NULL AFTER is_checked");
+  await ensureColumn("shopping_list_items", "checked_at", "checked_at DATETIME NULL AFTER checked_by_user_id");
   console.log(`[migrations] all ${TABLES.length} tables ready`);
 }
 

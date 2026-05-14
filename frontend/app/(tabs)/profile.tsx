@@ -90,6 +90,13 @@ export default function Profile() {
           <Text style={[styles.rowTitle, { flex: 1 }]}>Extrato da casa</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </TouchableOpacity>
+        <TouchableOpacity style={styles.row} onPress={() => router.push("/reports" as any)}>
+          <View style={[styles.rowIcon, { backgroundColor: colors.primarySoft }]}>
+            <Ionicons name="bar-chart-outline" size={18} color={colors.neutral} />
+          </View>
+          <Text style={[styles.rowTitle, { flex: 1 }]}>Relatórios completos</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.row} onPress={() => router.push("/bills")}>
           <View style={[styles.rowIcon, { backgroundColor: colors.debtBg }]}>
             <Ionicons name="wallet-outline" size={18} color={colors.debt} />
@@ -116,6 +123,13 @@ export default function Profile() {
             <Ionicons name="help-circle-outline" size={18} color={colors.neutral} />
           </View>
           <Text style={[styles.rowTitle, { flex: 1 }]}>Ajuda e tutorial</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.row} onPress={() => router.push("/tutorial" as any)}>
+          <View style={[styles.rowIcon, { backgroundColor: colors.neutralBg }]}>
+            <Ionicons name="game-controller-outline" size={18} color={colors.neutral} />
+          </View>
+          <Text style={[styles.rowTitle, { flex: 1 }]}>Ver tutorial inicial</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </TouchableOpacity>
 

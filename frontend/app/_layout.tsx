@@ -41,6 +41,7 @@ function RootStack() {
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
         <Stack.Screen name="onboarding" />
+        <Stack.Screen name="tutorial" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="expense/new" options={{ presentation: "modal" }} />
         <Stack.Screen name="contribution/new" options={{ presentation: "modal" }} />
@@ -49,6 +50,7 @@ function RootStack() {
         <Stack.Screen name="help" />
         <Stack.Screen name="shopping-list" />
         <Stack.Screen name="statement" />
+        <Stack.Screen name="reports" />
         <Stack.Screen name="bills" />
         <Stack.Screen name="chores" />
         <Stack.Screen name="terms-lgpd" />

@@ -90,6 +90,7 @@ const PERMISSION_LABELS = {
   manage_bills: "Gerenciar contas a pagar/receber",
   manage_shopping_list: "Usar lista de compras",
   manage_chores: "Gerenciar afazeres da casa",
+  view_reports: "Ver relatórios completos",
   manage_members: "Gerenciar moradores e permissões",
   manage_settings: "Alterar configurações da casa",
 };
@@ -104,6 +105,7 @@ const DEFAULT_MEMBER_PERMISSIONS = {
   manage_bills: true,
   manage_shopping_list: true,
   manage_chores: false,
+  view_reports: true,
   manage_members: false,
   manage_settings: false,
 };
@@ -319,6 +321,7 @@ async function serializeHouse(h) {
 
 async function serializeExpense(e) {
   const payer = await one("SELECT name FROM users WHERE id=?", [e.payer_id]);
+  const creator = e.created_by_user_id ? await one("SELECT name FROM users WHERE id=?", [e.created_by_user_id]) : null;
   const cat = e.category_id ? await one("SELECT * FROM categories WHERE id=?", [e.category_id]) : null;
   const parts = await query(
     `SELECT ep.*, u.name FROM expense_participants ep
@@ -336,6 +339,8 @@ async function serializeExpense(e) {
     has_items: !!e.has_items, is_paid: !!e.is_paid,
     is_recurring_instance: !!e.is_recurring_instance,
     notes: e.notes,
+    created_by_user_id: e.created_by_user_id || null,
+    created_by_name: creator ? creator.name : null,
     participants: parts.map((p) => ({
       user_id: p.user_id, name: p.name, share_amount: p.share_amount,
     })),
@@ -602,6 +607,59 @@ api.put("/houses/:id/members/:userId/permissions", auth, wrap(async (req, res) =
   res.json(await serializeHouse(fresh));
 }));
 
+api.post("/houses/:id/transfer-owner", auth, wrap(async (req, res) => {
+  const h = await one("SELECT * FROM houses WHERE id=?", [req.params.id]);
+  if (!h) return res.status(404).json({ detail: "Casa não encontrada" });
+  if (h.owner_id !== req.user.id) {
+    return res.status(403).json({ detail: "Apenas o dono atual pode transferir a casa" });
+  }
+
+  const targetUserId = req.body?.new_owner_user_id || req.body?.target_user_id;
+  const confirmHouseName = String(req.body?.confirm_house_name || "").trim();
+  const confirmText = String(req.body?.confirm_text || "").trim().toUpperCase();
+  if (!targetUserId || targetUserId === req.user.id) {
+    return res.status(400).json({ detail: "Escolha outro morador para receber a casa" });
+  }
+  if (confirmHouseName !== h.name || confirmText !== "TRANSFERIR") {
+    return res.status(400).json({
+      detail: "Confirmação inválida. Digite o nome exato da casa e a palavra TRANSFERIR.",
+    });
+  }
+
+  const target = await one(
+    `SELECT hm.*, u.name
+     FROM house_members hm JOIN users u ON u.id=hm.user_id
+     WHERE hm.house_id=? AND hm.user_id=?`,
+    [req.params.id, targetUserId]
+  );
+  if (!target) return res.status(404).json({ detail: "O novo dono precisa ser morador desta casa" });
+
+  const allPermissions = Object.fromEntries(PERMISSION_KEYS.map((key) => [key, true]));
+  await tx(async (c) => {
+    await c.execute("UPDATE houses SET owner_id=? WHERE id=?", [targetUserId, req.params.id]);
+    await c.execute(
+      "UPDATE house_members SET role='member', permissions_json=? WHERE house_id=? AND user_id=?",
+      [JSON.stringify(allPermissions), req.params.id, req.user.id]
+    );
+    await c.execute(
+      "UPDATE house_members SET role='owner', permissions_json=NULL WHERE house_id=? AND user_id=?",
+      [req.params.id, targetUserId]
+    );
+    await c.execute(
+      `INSERT INTO house_ownership_transfers
+       (id,house_id,previous_owner_id,new_owner_id,confirmed_by_user_id,confirmation_text,created_at)
+       VALUES (?,?,?,?,?,?,?)`,
+      [uuidv4(), req.params.id, req.user.id, targetUserId, req.user.id, confirmText, nowUtc()]
+    );
+    await c.execute(
+      `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+      [uuidv4(), req.params.id, req.user.id, "house.owner_transferred", target.name, nowUtc()]
+    );
+  });
+  const fresh = await one("SELECT * FROM houses WHERE id=?", [req.params.id]);
+  res.json(await serializeHouse(fresh));
+}));
+
 // CATEGORIES
 api.get("/houses/:id/categories", auth, wrap(async (req, res) => {
   await ensureMember(req.params.id, req.user.id);
@@ -722,13 +780,13 @@ api.post("/houses/:id/expenses", auth, wrap(async (req, res) => {
   await tx(async (c) => {
     await c.execute(
       `INSERT INTO expenses
-       (id,house_id,month_id,payer_id,category_id,description,amount,expense_date,expense_type,split_type,has_items,is_paid,is_recurring_instance,notes,created_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+       (id,house_id,month_id,payer_id,category_id,description,amount,expense_date,expense_type,split_type,has_items,is_paid,is_recurring_instance,notes,created_by_user_id,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)`,
       [
         id, h.id, month.id, p.payer_id, p.category_id || null,
         p.description, amount, expDate, p.expense_type || "collective",
         p.split_type || "equal", items.length > 0 ? 1 : 0,
-        p.is_paid === false ? 0 : 1, p.notes || null, nowUtc(),
+        p.is_paid === false ? 0 : 1, p.notes || null, req.user.id, nowUtc(),
       ]
     );
     for (const s of shares) {
@@ -777,6 +835,10 @@ api.delete("/houses/:id/expenses/:eid", auth, wrap(async (req, res) => {
     if (m && m.status === "closed") return res.status(400).json({ detail: "Mês fechado" });
   }
   await query("DELETE FROM expenses WHERE id=?", [req.params.eid]);
+  await query(
+    `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+    [uuidv4(), req.params.id, req.user.id, "expense.deleted", e.description, nowUtc()]
+  );
   res.json({ ok: true });
 }));
 
@@ -791,9 +853,13 @@ api.post("/houses/:id/contributions", auth, wrap(async (req, res) => {
   if (m.status === "closed") return res.status(400).json({ detail: "Mês fechado" });
   const id = uuidv4();
   await query(
-    `INSERT INTO contributions (id,house_id,month_id,user_id,amount,description,contribution_date,is_auto,created_at)
-     VALUES (?,?,?,?,?,?,?,0,?)`,
-    [id, h.id, m.id, p.user_id, round2(p.amount), p.description || null, cdate, nowUtc()]
+    `INSERT INTO contributions (id,house_id,month_id,user_id,amount,description,contribution_date,is_auto,created_by_user_id,created_at)
+     VALUES (?,?,?,?,?,?,?,0,?,?)`,
+    [id, h.id, m.id, p.user_id, round2(p.amount), p.description || null, cdate, req.user.id, nowUtc()]
+  );
+  await query(
+    `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+    [uuidv4(), h.id, req.user.id, "contribution.created", `${round2(p.amount)} para ${p.user_id}`, nowUtc()]
   );
   const c = await one("SELECT * FROM contributions WHERE id=?", [id]);
   const u = await one("SELECT name FROM users WHERE id=?", [c.user_id]);
@@ -821,8 +887,16 @@ api.get("/houses/:id/contributions", auth, wrap(async (req, res) => {
 
 api.delete("/houses/:id/contributions/:cid", auth, wrap(async (req, res) => {
   await ensurePermission(req.params.id, req.user.id, "manage_contributions");
+  const contribution = await one("SELECT amount FROM contributions WHERE id=? AND house_id=?",
+    [req.params.cid, req.params.id]);
   await query("DELETE FROM contributions WHERE id=? AND house_id=?",
     [req.params.cid, req.params.id]);
+  if (contribution) {
+    await query(
+      `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+      [uuidv4(), req.params.id, req.user.id, "contribution.deleted", String(contribution.amount), nowUtc()]
+    );
+  }
   res.json({ ok: true });
 }));
 
@@ -834,9 +908,13 @@ api.post("/houses/:id/payments", auth, wrap(async (req, res) => {
   await ensureMember(req.params.id, p.to_user_id);
   const id = uuidv4();
   await query(
-    `INSERT INTO payments (id,house_id,from_user_id,to_user_id,amount,note,payment_date,created_at)
-     VALUES (?,?,?,?,?,?,?,?)`,
-    [id, req.params.id, p.from_user_id, p.to_user_id, round2(p.amount), p.note || null, today(), nowUtc()]
+    `INSERT INTO payments (id,house_id,from_user_id,to_user_id,amount,note,payment_date,created_by_user_id,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    [id, req.params.id, p.from_user_id, p.to_user_id, round2(p.amount), p.note || null, today(), req.user.id, nowUtc()]
+  );
+  await query(
+    `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+    [uuidv4(), req.params.id, req.user.id, "payment.created", String(round2(p.amount)), nowUtc()]
   );
   res.json({ ok: true, id });
 }));
@@ -926,9 +1004,10 @@ api.get("/houses/:id/statement", auth, wrap(async (req, res) => {
 api.get("/houses/:id/shopping-items", auth, wrap(async (req, res) => {
   await ensurePermission(req.params.id, req.user.id, "manage_shopping_list");
   const rows = await query(
-    `SELECT s.*, u.name AS created_by_name
+    `SELECT s.*, u.name AS created_by_name, cu.name AS checked_by_name
      FROM shopping_list_items s
      LEFT JOIN users u ON u.id=s.created_by_user_id
+     LEFT JOIN users cu ON cu.id=s.checked_by_user_id
      WHERE s.house_id=?
      ORDER BY s.is_checked ASC, s.created_at DESC`,
     [req.params.id]
@@ -942,6 +1021,9 @@ api.get("/houses/:id/shopping-items", auth, wrap(async (req, res) => {
     is_checked: !!s.is_checked,
     created_by_user_id: s.created_by_user_id,
     created_by_name: s.created_by_name,
+    checked_by_user_id: s.checked_by_user_id,
+    checked_by_name: s.checked_by_name,
+    checked_at: s.checked_at,
     created_at: s.created_at,
     updated_at: s.updated_at,
   })));
@@ -954,16 +1036,22 @@ api.post("/houses/:id/shopping-items", auth, wrap(async (req, res) => {
   const id = uuidv4();
   await query(
     `INSERT INTO shopping_list_items
-     (id,house_id,created_by_user_id,name,quantity,unit,notes,is_checked,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
+     (id,house_id,created_by_user_id,name,quantity,unit,notes,is_checked,checked_by_user_id,checked_at,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
     [
       id, req.params.id, req.user.id, name,
       Math.max(0.01, Number(req.body?.quantity) || 1),
       req.body?.unit ? String(req.body.unit).slice(0, 30) : null,
       req.body?.notes ? String(req.body.notes).slice(0, 255) : null,
       req.body?.is_checked ? 1 : 0,
+      req.body?.is_checked ? req.user.id : null,
+      req.body?.is_checked ? nowUtc() : null,
       nowUtc(),
     ]
+  );
+  await query(
+    `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+    [uuidv4(), req.params.id, req.user.id, "shopping.created", name, nowUtc()]
   );
   const rows = await query("SELECT * FROM shopping_list_items WHERE id=?", [id]);
   res.json({ ...rows[0], is_checked: !!rows[0].is_checked });
@@ -976,28 +1064,46 @@ api.put("/houses/:id/shopping-items/:itemId", auth, wrap(async (req, res) => {
   if (!current) return res.status(404).json({ detail: "Item não encontrado" });
   const name = req.body?.name != null ? String(req.body.name).trim() : current.name;
   if (name.length < 2) return res.status(400).json({ detail: "Nome do item inválido" });
+  const nextChecked = req.body?.is_checked != null ? (req.body.is_checked ? 1 : 0) : current.is_checked;
+  const changedToChecked = !current.is_checked && nextChecked === 1;
+  const changedToOpen = current.is_checked && nextChecked === 0;
   await query(
     `UPDATE shopping_list_items
-     SET name=?, quantity=?, unit=?, notes=?, is_checked=?, updated_at=?
+     SET name=?, quantity=?, unit=?, notes=?, is_checked=?, checked_by_user_id=?, checked_at=?, updated_at=?
      WHERE id=? AND house_id=?`,
     [
       name,
       req.body?.quantity != null ? Math.max(0.01, Number(req.body.quantity) || 1) : current.quantity,
       req.body?.unit != null ? String(req.body.unit).slice(0, 30) : current.unit,
       req.body?.notes != null ? String(req.body.notes).slice(0, 255) : current.notes,
-      req.body?.is_checked != null ? (req.body.is_checked ? 1 : 0) : current.is_checked,
+      nextChecked,
+      changedToChecked ? req.user.id : changedToOpen ? null : current.checked_by_user_id,
+      changedToChecked ? nowUtc() : changedToOpen ? null : current.checked_at,
       nowUtc(),
       req.params.itemId,
       req.params.id,
     ]
   );
+  if (changedToChecked || changedToOpen) {
+    await query(
+      `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+      [uuidv4(), req.params.id, req.user.id, changedToChecked ? "shopping.checked" : "shopping.unchecked", name, nowUtc()]
+    );
+  }
   const fresh = await one("SELECT * FROM shopping_list_items WHERE id=?", [req.params.itemId]);
   res.json({ ...fresh, is_checked: !!fresh.is_checked });
 }));
 
 api.delete("/houses/:id/shopping-items/:itemId", auth, wrap(async (req, res) => {
   await ensurePermission(req.params.id, req.user.id, "manage_shopping_list");
+  const item = await one("SELECT name FROM shopping_list_items WHERE id=? AND house_id=?", [req.params.itemId, req.params.id]);
   await query("DELETE FROM shopping_list_items WHERE id=? AND house_id=?", [req.params.itemId, req.params.id]);
+  if (item) {
+    await query(
+      `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+      [uuidv4(), req.params.id, req.user.id, "shopping.deleted", item.name, nowUtc()]
+    );
+  }
   res.json({ ok: true });
 }));
 
@@ -1064,6 +1170,10 @@ api.post("/houses/:id/bills", auth, wrap(async (req, res) => {
       p.status || "open", p.party_name || null, req.user.id, nowUtc(),
     ]
   );
+  await query(
+    `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+    [uuidv4(), req.params.id, req.user.id, billType === "payable" ? "bill.payable.created" : "bill.receivable.created", title, nowUtc()]
+  );
   const row = await one(
     `SELECT b.*, c.name AS category_name, u.name AS user_name
      FROM bills b
@@ -1099,6 +1209,10 @@ api.put("/houses/:id/bills/:billId", auth, wrap(async (req, res) => {
       req.params.id,
     ]
   );
+  await query(
+    `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+    [uuidv4(), req.params.id, req.user.id, status === "paid" ? "bill.paid" : "bill.updated", p.title || current.title, nowUtc()]
+  );
   const row = await one(
     `SELECT b.*, c.name AS category_name, u.name AS user_name
      FROM bills b
@@ -1111,7 +1225,14 @@ api.put("/houses/:id/bills/:billId", auth, wrap(async (req, res) => {
 
 api.delete("/houses/:id/bills/:billId", auth, wrap(async (req, res) => {
   await ensurePermission(req.params.id, req.user.id, "manage_bills");
+  const bill = await one("SELECT title FROM bills WHERE id=? AND house_id=?", [req.params.billId, req.params.id]);
   await query("DELETE FROM bills WHERE id=? AND house_id=?", [req.params.billId, req.params.id]);
+  if (bill) {
+    await query(
+      `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+      [uuidv4(), req.params.id, req.user.id, "bill.deleted", bill.title, nowUtc()]
+    );
+  }
   res.json({ ok: true });
 }));
 
@@ -1208,6 +1329,10 @@ api.post("/houses/:id/chores", auth, wrap(async (req, res) => {
         [uuidv4(), id, uid, "pending", nowUtc()]
       );
     }
+    await c.execute(
+      `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+      [uuidv4(), req.params.id, req.user.id, "chore.created", title, nowUtc()]
+    );
   });
   const row = await one(
     `SELECT c.*, u.name AS created_by_name
@@ -1239,6 +1364,10 @@ api.post("/houses/:id/chores/:choreId/complete", auth, wrap(async (req, res) => 
     "UPDATE house_chores SET status=?, updated_at=? WHERE id=?",
     [pending ? "open" : "done", nowUtc(), req.params.choreId]
   );
+  await query(
+    `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+    [uuidv4(), req.params.id, req.user.id, "chore.completed", chore.title, nowUtc()]
+  );
   const row = await one(
     `SELECT c.*, u.name AS created_by_name
      FROM house_chores c LEFT JOIN users u ON u.id=c.created_by_user_id WHERE c.id=?`,
@@ -1249,8 +1378,217 @@ api.post("/houses/:id/chores/:choreId/complete", auth, wrap(async (req, res) => 
 
 api.delete("/houses/:id/chores/:choreId", auth, wrap(async (req, res) => {
   await ensurePermission(req.params.id, req.user.id, "manage_chores");
+  const chore = await one("SELECT title FROM house_chores WHERE id=? AND house_id=?", [req.params.choreId, req.params.id]);
   await query("DELETE FROM house_chores WHERE id=? AND house_id=?", [req.params.choreId, req.params.id]);
+  if (chore) {
+    await query(
+      `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+      [uuidv4(), req.params.id, req.user.id, "chore.deleted", chore.title, nowUtc()]
+    );
+  }
   res.json({ ok: true });
+}));
+
+// REPORTS
+const REPORT_ACTION_LABELS = {
+  "house.created": "Casa criada",
+  "member.joined": "Morador entrou na casa",
+  "month.closed": "Mês fechado",
+  "expense.created": "Gasto cadastrado",
+  "expense.deleted": "Gasto removido",
+  "contribution.created": "Contribuição cadastrada",
+  "contribution.deleted": "Contribuição removida",
+  "payment.created": "Acerto registrado",
+  "shopping.created": "Item criado na lista de compras",
+  "shopping.checked": "Item marcado como comprado",
+  "shopping.unchecked": "Item voltou para pendente",
+  "shopping.deleted": "Item removido da lista de compras",
+  "bill.payable.created": "Conta a pagar criada",
+  "bill.receivable.created": "Conta a receber criada",
+  "bill.paid": "Conta marcada como paga",
+  "bill.updated": "Conta atualizada",
+  "bill.deleted": "Conta removida",
+  "chore.created": "Afazer criado",
+  "chore.completed": "Afazer concluído",
+  "chore.deleted": "Afazer removido",
+  "house.owner_transferred": "Dono da casa alterado",
+};
+
+function queryDate(value) {
+  const text = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+}
+
+function firstRow(rows, fallback = {}) {
+  return rows && rows[0] ? rows[0] : fallback;
+}
+
+api.get("/houses/:id/reports", auth, wrap(async (req, res) => {
+  await ensurePermission(req.params.id, req.user.id, "view_reports");
+  const h = await one("SELECT * FROM houses WHERE id=?", [req.params.id]);
+  if (!h) return res.status(404).json({ detail: "Casa não encontrada" });
+  const current = await currentMonth(h.id, h.month_start_day);
+  const from = queryDate(req.query.from) || current.start_date;
+  const to = queryDate(req.query.to) || current.end_date;
+
+  const expenseSummary = firstRow(await query(
+    `SELECT COUNT(*) AS total_count, COALESCE(SUM(amount),0) AS total_amount
+     FROM expenses WHERE house_id=? AND expense_date BETWEEN ? AND ?`,
+    [req.params.id, from, to]
+  ), { total_count: 0, total_amount: 0 });
+  const contributionSummary = firstRow(await query(
+    `SELECT COUNT(*) AS total_count, COALESCE(SUM(amount),0) AS total_amount
+     FROM contributions WHERE house_id=? AND contribution_date BETWEEN ? AND ?`,
+    [req.params.id, from, to]
+  ), { total_count: 0, total_amount: 0 });
+  const shoppingSummary = firstRow(await query(
+    `SELECT COUNT(*) AS total_count,
+            COALESCE(SUM(CASE WHEN is_checked=1 THEN 1 ELSE 0 END),0) AS checked_count
+     FROM shopping_list_items WHERE house_id=? AND DATE(created_at) BETWEEN ? AND ?`,
+    [req.params.id, from, to]
+  ), { total_count: 0, checked_count: 0 });
+  const choreSummary = firstRow(await query(
+    `SELECT COUNT(*) AS total_count,
+            COALESCE(SUM(CASE WHEN status='done' THEN 1 ELSE 0 END),0) AS done_count
+     FROM house_chores WHERE house_id=? AND DATE(created_at) BETWEEN ? AND ?`,
+    [req.params.id, from, to]
+  ), { total_count: 0, done_count: 0 });
+  const billsByStatus = await query(
+    `SELECT bill_type, status, COUNT(*) AS total_count, COALESCE(SUM(amount),0) AS total_amount
+     FROM bills WHERE house_id=? AND due_date BETWEEN ? AND ?
+     GROUP BY bill_type, status`,
+    [req.params.id, from, to]
+  );
+
+  const expensesByPerson = await query(
+    `SELECT e.payer_id AS user_id, u.name, COUNT(*) AS purchase_count,
+            COALESCE(SUM(e.amount),0) AS total_paid
+     FROM expenses e JOIN users u ON u.id=e.payer_id
+     WHERE e.house_id=? AND e.expense_date BETWEEN ? AND ?
+     GROUP BY e.payer_id, u.name
+     ORDER BY total_paid DESC`,
+    [req.params.id, from, to]
+  );
+  const expensesRegisteredBy = await query(
+    `SELECT e.created_by_user_id AS user_id, u.name, COUNT(*) AS registered_count,
+            COALESCE(SUM(e.amount),0) AS total_amount
+     FROM expenses e LEFT JOIN users u ON u.id=e.created_by_user_id
+     WHERE e.house_id=? AND e.expense_date BETWEEN ? AND ?
+     GROUP BY e.created_by_user_id, u.name
+     ORDER BY registered_count DESC`,
+    [req.params.id, from, to]
+  );
+  const contributionsByPerson = await query(
+    `SELECT c.user_id, u.name, COUNT(*) AS contribution_count,
+            COALESCE(SUM(c.amount),0) AS total_contributed
+     FROM contributions c JOIN users u ON u.id=c.user_id
+     WHERE c.house_id=? AND c.contribution_date BETWEEN ? AND ?
+     GROUP BY c.user_id, u.name
+     ORDER BY total_contributed DESC`,
+    [req.params.id, from, to]
+  );
+  const shoppingAddedBy = await query(
+    `SELECT s.created_by_user_id AS user_id, u.name, COUNT(*) AS added_count
+     FROM shopping_list_items s LEFT JOIN users u ON u.id=s.created_by_user_id
+     WHERE s.house_id=? AND DATE(s.created_at) BETWEEN ? AND ?
+     GROUP BY s.created_by_user_id, u.name
+     ORDER BY added_count DESC`,
+    [req.params.id, from, to]
+  );
+  const shoppingCheckedBy = await query(
+    `SELECT s.checked_by_user_id AS user_id, u.name, COUNT(*) AS checked_count
+     FROM shopping_list_items s LEFT JOIN users u ON u.id=s.checked_by_user_id
+     WHERE s.house_id=? AND s.is_checked=1 AND s.checked_at IS NOT NULL AND DATE(s.checked_at) BETWEEN ? AND ?
+     GROUP BY s.checked_by_user_id, u.name
+     ORDER BY checked_count DESC`,
+    [req.params.id, from, to]
+  );
+  const choresByPerson = await query(
+    `SELECT a.user_id, u.name, COUNT(*) AS assigned_count,
+            COALESCE(SUM(CASE WHEN a.status='done' THEN 1 ELSE 0 END),0) AS completed_count,
+            MAX(a.completed_at) AS last_completed_at
+     FROM house_chore_assignments a
+     JOIN house_chores c ON c.id=a.chore_id
+     JOIN users u ON u.id=a.user_id
+     WHERE c.house_id=? AND (DATE(c.created_at) BETWEEN ? AND ? OR DATE(a.completed_at) BETWEEN ? AND ?)
+     GROUP BY a.user_id, u.name
+     ORDER BY completed_count DESC, assigned_count DESC`,
+    [req.params.id, from, to, from, to]
+  );
+  const activity = await query(
+    `SELECT al.*, u.name AS user_name
+     FROM activity_logs al LEFT JOIN users u ON u.id=al.user_id
+     WHERE al.house_id=? AND DATE(al.created_at) BETWEEN ? AND ?
+     ORDER BY al.created_at DESC LIMIT 80`,
+    [req.params.id, from, to]
+  );
+
+  res.json({
+    house_id: h.id,
+    house_name: h.name,
+    period: { from, to },
+    summary: {
+      expenses_count: Number(expenseSummary.total_count || 0),
+      expenses_total: round2(expenseSummary.total_amount || 0),
+      contributions_count: Number(contributionSummary.total_count || 0),
+      contributions_total: round2(contributionSummary.total_amount || 0),
+      shopping_items_count: Number(shoppingSummary.total_count || 0),
+      shopping_items_checked: Number(shoppingSummary.checked_count || 0),
+      chores_count: Number(choreSummary.total_count || 0),
+      chores_done: Number(choreSummary.done_count || 0),
+      house_balance: round2((contributionSummary.total_amount || 0) - (expenseSummary.total_amount || 0)),
+    },
+    bills_by_status: billsByStatus.map((b) => ({
+      bill_type: b.bill_type,
+      status: b.status,
+      total_count: Number(b.total_count || 0),
+      total_amount: round2(b.total_amount || 0),
+    })),
+    expenses_by_person: expensesByPerson.map((r) => ({
+      user_id: r.user_id,
+      name: r.name,
+      purchase_count: Number(r.purchase_count || 0),
+      total_paid: round2(r.total_paid || 0),
+    })),
+    expenses_registered_by: expensesRegisteredBy.map((r) => ({
+      user_id: r.user_id,
+      name: r.name || "Sem registro",
+      registered_count: Number(r.registered_count || 0),
+      total_amount: round2(r.total_amount || 0),
+    })),
+    contributions_by_person: contributionsByPerson.map((r) => ({
+      user_id: r.user_id,
+      name: r.name,
+      contribution_count: Number(r.contribution_count || 0),
+      total_contributed: round2(r.total_contributed || 0),
+    })),
+    shopping_added_by: shoppingAddedBy.map((r) => ({
+      user_id: r.user_id,
+      name: r.name || "Sem registro",
+      added_count: Number(r.added_count || 0),
+    })),
+    shopping_checked_by: shoppingCheckedBy.map((r) => ({
+      user_id: r.user_id,
+      name: r.name || "Sem registro",
+      checked_count: Number(r.checked_count || 0),
+    })),
+    chores_by_person: choresByPerson.map((r) => ({
+      user_id: r.user_id,
+      name: r.name,
+      assigned_count: Number(r.assigned_count || 0),
+      completed_count: Number(r.completed_count || 0),
+      last_completed_at: r.last_completed_at,
+    })),
+    activity: activity.map((a) => ({
+      id: a.id,
+      user_id: a.user_id,
+      user_name: a.user_name || "Sistema",
+      action: a.action,
+      action_label: REPORT_ACTION_LABELS[a.action] || a.action,
+      details: a.details,
+      created_at: a.created_at,
+    })),
+  });
 }));
 
 // RECURRING
