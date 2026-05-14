@@ -3,6 +3,7 @@
   "version": "1.2.1",
   "private": true,
   "description": "Deploy wrapper for Hostinger. The API application lives in backend-node.",
+  "main": "backend-node/server.js",
   "scripts": {
     "postinstall": "npm install --prefix backend-node --omit=dev",
     "start": "npm start --prefix backend-node"
