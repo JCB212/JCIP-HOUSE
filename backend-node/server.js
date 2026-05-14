@@ -21,6 +21,10 @@ const JWT_SECRET = process.env.JWT_SECRET || "change-me";
 const JWT_EXPIRE_DAYS = Number(process.env.JWT_EXPIRE_DAYS || 30);
 const PORT = Number(process.env.PORT || 8001);
 const RESET_CODE_MINUTES = Number(process.env.RESET_CODE_MINUTES || 30);
+const startupState = {
+  migrations: "pending",
+  migrations_error_code: null,
+};
 
 const app = express();
 app.disable("x-powered-by");
@@ -355,18 +359,33 @@ async function serializeExpense(e) {
 
 api.get("/", (_req, res) => res.json({ message: "JCIP House Finance API (Node.js)", status: "online" }));
 
-api.get("/health", wrap(async (_req, res) => {
+api.get("/health", async (_req, res) => {
   const startedAt = Date.now();
-  await one("SELECT 1 AS ok");
-  res.json({
-    status: "ok",
-    api: "online",
-    database: "online",
-    db_configured: !!process.env.DB_NAME,
-    latency_ms: Date.now() - startedAt,
-    timestamp: nowUtc(),
-  });
-}));
+  try {
+    await one("SELECT 1 AS ok");
+    res.json({
+      status: "ok",
+      api: "online",
+      database: "online",
+      db_configured: !!process.env.DB_NAME,
+      migrations: startupState.migrations,
+      latency_ms: Date.now() - startedAt,
+      timestamp: nowUtc(),
+    });
+  } catch (e) {
+    res.status(503).json({
+      status: "degraded",
+      api: "online",
+      database: "offline",
+      db_configured: !!process.env.DB_NAME,
+      migrations: startupState.migrations,
+      db_error_code: e?.code || "UNKNOWN",
+      startup_error_code: startupState.migrations_error_code,
+      latency_ms: Date.now() - startedAt,
+      timestamp: nowUtc(),
+    });
+  }
+});
 
 // AUTH
 api.post("/auth/register", authLimiter, wrap(async (req, res) => {
@@ -1943,11 +1962,16 @@ app.use("/api", api);
 (async () => {
   try {
     await runMigrations();
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`[server] JCIP House Finance API listening on port ${PORT}`);
-    });
+    startupState.migrations = "ok";
   } catch (e) {
-    console.error("[fatal] startup failed:", e);
-    process.exit(1);
+    startupState.migrations = "failed";
+    startupState.migrations_error_code = e?.code || "UNKNOWN";
+    console.error("[startup] migrations failed; API will stay online:", e);
   }
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`[server] JCIP House Finance API listening on port ${PORT}`);
+  }).on("error", (e) => {
+    console.error("[fatal] listen failed:", e);
+    process.exit(1);
+  });
 })();
