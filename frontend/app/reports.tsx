@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -22,14 +22,14 @@ type Report = {
     chores_done: number;
     house_balance: number;
   };
-  bills_by_status: Array<{ bill_type: string; status: string; total_count: number; total_amount: number }>;
-  expenses_by_person: Array<{ user_id: string; name: string; purchase_count: number; total_paid: number }>;
-  expenses_registered_by: Array<{ user_id: string | null; name: string; registered_count: number; total_amount: number }>;
-  contributions_by_person: Array<{ user_id: string; name: string; contribution_count: number; total_contributed: number }>;
-  shopping_added_by: Array<{ user_id: string | null; name: string; added_count: number }>;
-  shopping_checked_by: Array<{ user_id: string | null; name: string; checked_count: number }>;
-  chores_by_person: Array<{ user_id: string; name: string; assigned_count: number; completed_count: number; last_completed_at: string | null }>;
-  activity: Array<{ id: string; user_name: string; action_label: string; details: string | null; created_at: string }>;
+  bills_by_status: { bill_type: string; status: string; total_count: number; total_amount: number }[];
+  expenses_by_person: { user_id: string; name: string; purchase_count: number; total_paid: number }[];
+  expenses_registered_by: { user_id: string | null; name: string; registered_count: number; total_amount: number }[];
+  contributions_by_person: { user_id: string; name: string; contribution_count: number; total_contributed: number }[];
+  shopping_added_by: { user_id: string | null; name: string; added_count: number }[];
+  shopping_checked_by: { user_id: string | null; name: string; checked_count: number }[];
+  chores_by_person: { user_id: string; name: string; assigned_count: number; completed_count: number; last_completed_at: string | null }[];
+  activity: { id: string; user_name: string; action_label: string; details: string | null; created_at: string }[];
 };
 
 function shortDate(value?: string | null) {
@@ -49,18 +49,18 @@ export default function Reports() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!house) return;
     setError("");
     const data = await api.get<Report>(`/houses/${house.id}/reports`);
     setReport(data);
-  }
+  }, [house]);
 
   useEffect(() => {
     load()
       .catch((e) => setError(e.message || "Não foi possível carregar os relatórios."))
       .finally(() => setLoading(false));
-  }, [house?.id]);
+  }, [house?.id, load]);
 
   async function refresh() {
     setRefreshing(true);

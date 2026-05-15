@@ -13,7 +13,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../src/api";
 import { useAuth } from "../src/AuthContext";
-import { formatBRL, radius, spacing } from "../src/theme";
+import { formatBRL, formatDateBR, radius, spacing } from "../src/theme";
 import { useAppTheme } from "../src/ThemeContext";
 
 type StatementRow = {
@@ -108,7 +108,7 @@ export default function Statement() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle}>{row.title}</Text>
                 <Text style={styles.rowSub}>{row.subtitle}</Text>
-                <Text style={styles.rowDate}>{row.date}</Text>
+                <Text style={styles.rowDate}>{formatDateBR(row.date)}</Text>
               </View>
               <Text style={[styles.rowAmount, { color: colorFor(row) }]}>
                 {row.direction === "out" ? "-" : row.direction === "in" ? "+" : ""}

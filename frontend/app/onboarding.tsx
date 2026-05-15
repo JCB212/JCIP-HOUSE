@@ -38,7 +38,7 @@ export default function Onboarding() {
         if (code.trim().length < 4) throw new Error("Informe um código válido");
         await joinHouse(code.trim().toUpperCase());
       }
-      router.replace("/tutorial");
+      router.replace("/tutorial" as any);
     } catch (e: any) {
       Alert.alert("Erro", e.message || "Falha");
     } finally {

@@ -9,7 +9,12 @@ const SECTIONS = [
   {
     icon: "home-outline",
     title: "Casa e moradores",
-    text: "A casa é o grupo principal. Ela pode ser sua família, república, casal, escritório pequeno ou qualquer grupo que divide contas. O dono cria a casa e passa o código para os moradores entrarem. Cada morador aparece no resumo com quanto pagou, quanto contribuiu, quanto cabe para ele e se está devendo ou recebendo.",
+    text: "A casa é o grupo principal. Pode ser família, casal, república ou qualquer grupo que mora junto. O dono cria a casa e passa o código para os moradores entrarem.",
+  },
+  {
+    icon: "apps-outline",
+    title: "Dois modos no mesmo app",
+    text: "Use JCIP HOUSE para rotina do lar: afazeres, compras, contas e combinados. Use JCIP HOUSE FINANCE para dinheiro: gastos, contribuições, acertos, extrato e relatórios. É o mesmo app, só muda a organização da tela.",
   },
   {
     icon: "receipt-outline",
@@ -49,7 +54,7 @@ const SECTIONS = [
   {
     icon: "checkbox-outline",
     title: "Afazeres da casa",
-    text: "Afazeres são tarefas da rotina: lavar pratos, tirar lixo, limpar banheiro, comprar água, organizar sala. O dono ou sub-dono cria a tarefa, escolhe uma ou mais pessoas, coloca dia e hora, e quem recebeu marca quando fez. O app guarda data e horário.",
+    text: "Afazeres são tarefas da rotina: lavar pratos, tirar lixo, limpar banheiro, comprar água e organizar sala. O dono ou sub-dono escolhe data, hora e repetição: diário, semanal, quinzenal, mensal ou personalizado. Também pode deixar sem responsável para alguém assumir.",
   },
   {
     icon: "cloud-done-outline",
@@ -75,6 +80,7 @@ const SECTIONS = [
 
 const DAILY_STEPS = [
   "Crie a casa e convide os moradores pelo código.",
+  "Escolha o modo: Lar para rotina ou Finance para dinheiro.",
   "Confira as permissões de cada pessoa em Configurações.",
   "Cadastre gastos sempre que alguém pagar algo.",
   "Use Recorrentes para contas fixas e contribuições mensais.",

@@ -14,7 +14,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../src/api";
 import { useAuth } from "../src/AuthContext";
-import { formatBRL, radius, spacing } from "../src/theme";
+import { dateBRToISO, formatBRL, formatDateBR, radius, spacing, todayISODate } from "../src/theme";
 import { useAppTheme } from "../src/ThemeContext";
 import { scheduleLocalReminder } from "../src/notifications";
 
@@ -39,7 +39,7 @@ export default function Bills() {
   const [loading, setLoading] = useState(false);
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
-  const [dueDate, setDueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [dueDate, setDueDate] = useState(formatDateBR(todayISODate()));
   const [party, setParty] = useState("");
 
   const load = useCallback(async () => {
@@ -59,7 +59,8 @@ export default function Bills() {
   async function addBill() {
     if (!house) return;
     const value = parseFloat(amount.replace(",", ".")) || 0;
-    if (!title.trim() || value <= 0 || !dueDate.trim()) {
+    const dueDateISO = dateBRToISO(dueDate);
+    if (!title.trim() || value <= 0 || !dueDateISO.trim()) {
       Alert.alert("Atenção", "Informe descrição, valor e vencimento");
       return;
     }
@@ -68,13 +69,13 @@ export default function Bills() {
         bill_type: tab,
         title: title.trim(),
         amount: value,
-        due_date: dueDate.trim(),
+        due_date: dueDateISO,
         party_name: party.trim() || null,
       });
       await scheduleLocalReminder(
         tab === "payable" ? "Conta a pagar" : "Conta a receber",
-        `${title.trim()} vence em ${dueDate.trim()}`,
-        `${dueDate.trim()}T09:00:00`
+        `${title.trim()} vence em ${formatDateBR(dueDateISO)}`,
+        `${dueDateISO}T09:00:00`
       ).catch(() => undefined);
       setTitle("");
       setAmount("");
@@ -161,7 +162,7 @@ export default function Bills() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.label}>Vencimento</Text>
-              <TextInput style={styles.input} placeholder="AAAA-MM-DD" placeholderTextColor={colors.textMuted} value={dueDate} onChangeText={setDueDate} />
+              <TextInput style={styles.input} placeholder="DD/MM/AAAA" placeholderTextColor={colors.textMuted} value={dueDate} onChangeText={setDueDate} keyboardType="numbers-and-punctuation" />
             </View>
           </View>
           <Text style={styles.label}>{tab === "payable" ? "Fornecedor" : "Quem vai pagar"}</Text>
@@ -188,7 +189,7 @@ export default function Bills() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.billTitle}>{item.title}</Text>
-                  <Text style={styles.billSub}>{item.party_name || "Sem nome"} • vence {item.due_date}</Text>
+                  <Text style={styles.billSub}>{item.party_name || "Sem nome"} • vence {formatDateBR(item.due_date)}</Text>
                 </View>
                 <Text style={[styles.billAmount, { color: tab === "payable" ? colors.debt : colors.positive }]}>
                   {formatBRL(item.amount, house?.currency)}

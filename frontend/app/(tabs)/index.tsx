@@ -8,12 +8,21 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api";
 import { useAuth } from "../../src/AuthContext";
-import { formatBRL, radius, spacing } from "../../src/theme";
+import { useAppMode } from "../../src/AppModeContext";
+import { formatBRL, formatDateTimeBR, radius, spacing } from "../../src/theme";
 import { useAppTheme } from "../../src/ThemeContext";
 
 type MonthOut = {
   id: string; year: number; month_number: number; status: string;
   start_date: string; end_date: string; carried_balance: number; closed_at?: string | null;
+};
+type ChoreSummary = {
+  id: string;
+  title: string;
+  due_at?: string | null;
+  recurrence: string;
+  status: string;
+  assignments: { user_id: string; user_name: string; status: string }[];
 };
 
 const MONTH_NAMES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -21,6 +30,7 @@ const MONTH_NAMES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out"
 export default function Home() {
   const { house, user } = useAuth();
   const { colors } = useAppTheme();
+  const { appMode, setAppMode } = useAppMode();
   const styles = createStyles(colors);
   const router = useRouter();
   const [data, setData] = useState<any>(null);
@@ -29,6 +39,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [houseChores, setHouseChores] = useState<ChoreSummary[]>([]);
 
   const load = useCallback(async () => {
     if (!house) return;
@@ -41,6 +52,7 @@ export default function Home() {
       setMonths(mlist);
       setData(dash);
       if (!selectedMonth) setSelectedMonth(dash.current_month.id);
+      api.get<ChoreSummary[]>(`/houses/${house.id}/chores`).then(setHouseChores).catch(() => undefined);
     } catch (e: any) {
       console.error(e);
     } finally {
@@ -100,6 +112,9 @@ export default function Home() {
   const cm = data?.current_month as MonthOut;
   const isClosed = cm?.status === "closed";
   const totalCat = (data?.expenses_by_category || []).reduce((s: number, c: any) => s + c.total, 0);
+  const openChores = houseChores.filter((c) => c.status !== "done");
+  const freeChores = openChores.filter((c) => c.assignments.length === 0);
+  const assignedToMe = openChores.filter((c) => c.assignments.some((a) => a.user_id === user?.id));
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top"]}>
@@ -118,6 +133,112 @@ export default function Home() {
           </TouchableOpacity>
         </View>
 
+        <View style={styles.modeSwitch}>
+          <TouchableOpacity
+            style={[styles.modeBtn, appMode === "house" && styles.modeBtnActive]}
+            onPress={() => setAppMode("house")}
+          >
+            <Ionicons name="home-outline" size={16} color={appMode === "house" ? colors.primaryText : colors.textSecondary} />
+            <Text style={[styles.modeText, appMode === "house" && styles.modeTextActive]}>JCIP HOUSE</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modeBtn, appMode === "finance" && styles.modeBtnActive]}
+            onPress={() => setAppMode("finance")}
+          >
+            <Ionicons name="wallet-outline" size={16} color={appMode === "finance" ? colors.primaryText : colors.textSecondary} />
+            <Text style={[styles.modeText, appMode === "finance" && styles.modeTextActive]}>JCIP HOUSE FINANCE</Text>
+          </TouchableOpacity>
+        </View>
+
+        {appMode === "house" ? (
+          <>
+            <View style={styles.houseHero}>
+              <Text style={styles.houseModeLabel}>Modo lar</Text>
+              <Text style={styles.houseModeTitle}>Rotina da casa em ordem</Text>
+              <Text style={styles.houseModeText}>Organize tarefas, compras, contas e combinados sem misturar com a parte financeira.</Text>
+            </View>
+
+            <View style={styles.houseStatsRow}>
+              <View style={styles.houseStatCard}>
+                <Ionicons name="checkbox-outline" size={20} color={colors.neutral} />
+                <Text style={styles.houseStatValue}>{openChores.length}</Text>
+                <Text style={styles.houseStatLabel}>afazeres abertos</Text>
+              </View>
+              <View style={styles.houseStatCard}>
+                <Ionicons name="hand-left-outline" size={20} color={colors.positive} />
+                <Text style={styles.houseStatValue}>{freeChores.length}</Text>
+                <Text style={styles.houseStatLabel}>livres para assumir</Text>
+              </View>
+              <View style={styles.houseStatCard}>
+                <Ionicons name="person-outline" size={20} color={colors.warning} />
+                <Text style={styles.houseStatValue}>{assignedToMe.length}</Text>
+                <Text style={styles.houseStatLabel}>para mim</Text>
+              </View>
+            </View>
+
+            <View style={styles.quickRow}>
+              <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/chores" as any)}>
+                <Ionicons name="checkbox-outline" size={19} color={colors.neutral} />
+                <Text style={styles.quickText}>Afazeres</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/shopping-list")}>
+                <Ionicons name="cart-outline" size={19} color={colors.positive} />
+                <Text style={styles.quickText}>Compras</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.quickRow}>
+              <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/bills")}>
+                <Ionicons name="calendar-outline" size={19} color={colors.debt} />
+                <Text style={styles.quickText}>Contas</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/reports" as any)}>
+                <Ionicons name="bar-chart-outline" size={19} color={colors.textSecondary} />
+                <Text style={styles.quickText}>Relatórios</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/help")}>
+                <Ionicons name="help-circle-outline" size={19} color={colors.textSecondary} />
+                <Text style={styles.quickText}>Ajuda</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Próximos afazeres</Text>
+              {openChores.length === 0 ? (
+                <Text style={styles.empty}>Nenhum afazer aberto. Toque em Afazeres para criar a primeira rotina.</Text>
+              ) : (
+                openChores.slice(0, 5).map((item) => (
+                  <TouchableOpacity key={item.id} style={styles.homeChoreCard} onPress={() => router.push("/chores" as any)}>
+                    <View style={styles.homeChoreIcon}>
+                      <Ionicons name={item.assignments.length ? "time-outline" : "hand-left-outline"} size={17} color={colors.neutral} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.homeChoreTitle}>{item.title}</Text>
+                      <Text style={styles.homeChoreSub}>
+                        {formatDateTimeBR(item.due_at)} • {item.assignments.length ? item.assignments.map((a) => a.user_name.split(" ")[0]).join(", ") : "livre para assumir"}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Ideias boas para o lar</Text>
+              {[
+                ["Pratos", "Pode repetir 2 ou 3 vezes por dia."],
+                ["Lixo", "Bom para deixar diário ou em dias alternados."],
+                ["Banheiro", "Funciona bem semanal ou quinzenal."],
+                ["Compras", "Use lista antes do mercado e marque durante a compra."],
+              ].map(([title, sub]) => (
+                <View key={title} style={styles.tipMiniCard}>
+                  <Text style={styles.tipMiniTitle}>{title}</Text>
+                  <Text style={styles.tipMiniSub}>{sub}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : (
+          <>
         {/* Month selector */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ gap: 8, paddingVertical: spacing.md }}>
@@ -330,6 +451,8 @@ export default function Home() {
             ))
           )}
         </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -342,6 +465,76 @@ const createStyles = (colors: any) => StyleSheet.create({
   houseTitle: { fontSize: 22, fontWeight: "800", color: colors.textPrimary },
   iconBtn: { width: 40, height: 40, backgroundColor: colors.surface, borderRadius: 12,
     alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
+  modeSwitch: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 5,
+    marginTop: spacing.md,
+  },
+  modeBtn: {
+    flex: 1,
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+  },
+  modeBtnActive: { backgroundColor: colors.primary },
+  modeText: { color: colors.textSecondary, fontSize: 11, fontWeight: "900", textAlign: "center" },
+  modeTextActive: { color: colors.primaryText },
+
+  houseHero: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginTop: spacing.md,
+  },
+  houseModeLabel: { color: colors.neutral, fontSize: 12, fontWeight: "900", textTransform: "uppercase" },
+  houseModeTitle: { color: colors.textPrimary, fontSize: 24, fontWeight: "900", marginTop: 5 },
+  houseModeText: { color: colors.textSecondary, lineHeight: 20, marginTop: 6 },
+  houseStatsRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
+  houseStatCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
+    minHeight: 106,
+  },
+  houseStatValue: { color: colors.textPrimary, fontSize: 23, fontWeight: "900", marginTop: 6 },
+  houseStatLabel: { color: colors.textSecondary, fontSize: 11, lineHeight: 15, marginTop: 2 },
+  homeChoreCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: 7,
+  },
+  homeChoreIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: colors.neutralBg, alignItems: "center", justifyContent: "center", marginRight: spacing.md },
+  homeChoreTitle: { color: colors.textPrimary, fontWeight: "900" },
+  homeChoreSub: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  tipMiniCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: 7,
+  },
+  tipMiniTitle: { color: colors.textPrimary, fontWeight: "900" },
+  tipMiniSub: { color: colors.textSecondary, marginTop: 3, lineHeight: 18 },
 
   monthChip: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12,
     paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface,

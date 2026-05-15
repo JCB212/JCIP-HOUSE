@@ -96,3 +96,41 @@ export const formatBRL = (v: number, currency = "BRL") => {
     return `R$ ${(v || 0).toFixed(2)}`;
   }
 };
+
+function splitDateParts(value?: string | null) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const [date, time = ""] = raw.replace("T", " ").split(" ");
+  const [year, month, day] = date.split("-");
+  if (!year || !month || !day) return null;
+  return { year, month, day, time };
+}
+
+export const formatDateBR = (value?: string | null) => {
+  const parts = splitDateParts(value);
+  if (!parts) return "Sem data";
+  return `${parts.day}/${parts.month}/${parts.year}`;
+};
+
+export const formatDateTimeBR = (value?: string | null) => {
+  const parts = splitDateParts(value);
+  if (!parts) return "Sem data e hora";
+  const hour = parts.time ? parts.time.slice(0, 5) : "";
+  return `${parts.day}/${parts.month}/${parts.year}${hour ? ` às ${hour}` : ""}`;
+};
+
+export const todayISODate = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+export const dateBRToISO = (value: string) => {
+  const raw = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const [day, month, year] = raw.split("/");
+  if (!day || !month || !year) return raw;
+  return `${year.padStart(4, "0")}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+};

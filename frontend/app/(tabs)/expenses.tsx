@@ -13,7 +13,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../src/api";
 import { useAuth } from "../../src/AuthContext";
-import { formatBRL, radius, spacing } from "../../src/theme";
+import { formatBRL, formatDateBR, radius, spacing } from "../../src/theme";
 import { useAppTheme } from "../../src/ThemeContext";
 
 export default function ExpensesTab() {
@@ -102,7 +102,7 @@ export default function ExpensesTab() {
               <Text style={styles.meta}>
                 {item.payer_name} • {item.category_name || "Sem categoria"}
               </Text>
-              <Text style={styles.meta}>{item.expense_date}</Text>
+              <Text style={styles.meta}>{formatDateBR(item.expense_date)}</Text>
             </View>
             <View style={{ alignItems: "flex-end" }}>
               <Text style={styles.amount}>{formatBRL(item.amount, house?.currency)}</Text>

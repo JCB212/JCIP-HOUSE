@@ -1256,6 +1256,83 @@ api.delete("/houses/:id/bills/:billId", auth, wrap(async (req, res) => {
 }));
 
 // CHORES
+function sqlDateTimeFromDate(date) {
+  return date.toISOString().slice(0, 19).replace("T", " ");
+}
+
+function addMonthsSafe(date, count) {
+  const next = new Date(date.getTime());
+  const day = next.getDate();
+  next.setDate(1);
+  next.setMonth(next.getMonth() + count);
+  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(day, lastDay));
+  return next;
+}
+
+function nextChoreDueAt(dueAt, recurrence) {
+  const value = String(recurrence || "none");
+  if (!value || value === "none") return null;
+  const parts = value.split(":");
+  const base = dueAt ? new Date(String(dueAt).replace(" ", "T")) : new Date();
+  if (Number.isNaN(base.getTime())) return null;
+  if (parts[0] === "daily") {
+    const timesPerDay = Math.max(1, Math.min(Number(parts[1] || 1), 12));
+    base.setHours(base.getHours() + Math.round(24 / timesPerDay));
+    return sqlDateTimeFromDate(base);
+  }
+  if (parts[0] === "weekly") {
+    base.setDate(base.getDate() + 7);
+    return sqlDateTimeFromDate(base);
+  }
+  if (parts[0] === "biweekly") {
+    base.setDate(base.getDate() + 14);
+    return sqlDateTimeFromDate(base);
+  }
+  if (parts[0] === "monthly") {
+    return sqlDateTimeFromDate(addMonthsSafe(base, 1));
+  }
+  if (parts[0] === "every") {
+    const interval = Math.max(1, Math.min(Number(parts[1] || 1), 365));
+    const unit = parts[2] || "days";
+    if (unit === "weeks") base.setDate(base.getDate() + interval * 7);
+    else if (unit === "months") return sqlDateTimeFromDate(addMonthsSafe(base, interval));
+    else base.setDate(base.getDate() + interval);
+    return sqlDateTimeFromDate(base);
+  }
+  return null;
+}
+
+async function createNextRecurringChore(conn, chore, assignments) {
+  const nextDueAt = nextChoreDueAt(chore.due_at, chore.recurrence);
+  if (!nextDueAt) return null;
+  const nextId = uuidv4();
+  await conn.execute(
+    `INSERT INTO house_chores
+     (id,house_id,title,description,due_at,recurrence,status,created_by_user_id,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    [
+      nextId,
+      chore.house_id,
+      chore.title,
+      chore.description || null,
+      nextDueAt,
+      chore.recurrence,
+      "open",
+      chore.created_by_user_id,
+      nowUtc(),
+    ]
+  );
+  for (const a of assignments) {
+    await conn.execute(
+      `INSERT INTO house_chore_assignments (id,chore_id,user_id,status,created_at)
+       VALUES (?,?,?,?,?)`,
+      [uuidv4(), nextId, a.user_id, "pending", nowUtc()]
+    );
+  }
+  return nextId;
+}
+
 async function serializeChore(row) {
   const assignments = await query(
     `SELECT a.*, u.name AS user_name, u.email
@@ -1289,6 +1366,14 @@ async function serializeChore(row) {
 }
 
 async function canCompleteChore(choreId, userId, houseId) {
+  const assignedCount = await one(
+    `SELECT COUNT(*) AS total FROM house_chore_assignments WHERE chore_id=?`,
+    [choreId]
+  );
+  if (Number(assignedCount?.total || 0) === 0) {
+    await ensureMember(houseId, userId);
+    return true;
+  }
   const assignment = await one(
     `SELECT a.id FROM house_chore_assignments a
      JOIN house_chores c ON c.id=a.chore_id
@@ -1321,7 +1406,6 @@ api.post("/houses/:id/chores", auth, wrap(async (req, res) => {
   const title = String(req.body?.title || "").trim();
   if (title.length < 2) return res.status(400).json({ detail: "Título inválido" });
   const assignees = Array.isArray(req.body?.assignee_user_ids) ? req.body.assignee_user_ids : [];
-  if (!assignees.length) return res.status(400).json({ detail: "Escolha pelo menos um responsável" });
   for (const uid of assignees) await ensureMember(req.params.id, uid);
   const id = uuidv4();
   await tx(async (c) => {
@@ -1361,32 +1445,91 @@ api.post("/houses/:id/chores", auth, wrap(async (req, res) => {
   res.json(await serializeChore(row));
 }));
 
+api.post("/houses/:id/chores/:choreId/claim", auth, wrap(async (req, res) => {
+  await ensureMember(req.params.id, req.user.id);
+  const chore = await one("SELECT * FROM house_chores WHERE id=? AND house_id=?",
+    [req.params.choreId, req.params.id]);
+  if (!chore) return res.status(404).json({ detail: "Afazer não encontrado" });
+  if (chore.status === "done") return res.status(400).json({ detail: "Este afazer já foi concluído" });
+  const existing = await one(
+    "SELECT id FROM house_chore_assignments WHERE chore_id=? AND user_id=?",
+    [req.params.choreId, req.user.id]
+  );
+  if (!existing) {
+    await query(
+      `INSERT INTO house_chore_assignments (id,chore_id,user_id,status,created_at)
+       VALUES (?,?,?,?,?)`,
+      [uuidv4(), req.params.choreId, req.user.id, "pending", nowUtc()]
+    );
+    await query(
+      `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+      [uuidv4(), req.params.id, req.user.id, "chore.claimed", chore.title, nowUtc()]
+    );
+  }
+  const row = await one(
+    `SELECT c.*, u.name AS created_by_name
+     FROM house_chores c LEFT JOIN users u ON u.id=c.created_by_user_id WHERE c.id=?`,
+    [req.params.choreId]
+  );
+  res.json(await serializeChore(row));
+}));
+
 api.post("/houses/:id/chores/:choreId/complete", auth, wrap(async (req, res) => {
   await ensureMember(req.params.id, req.user.id);
   const chore = await one("SELECT * FROM house_chores WHERE id=? AND house_id=?",
     [req.params.choreId, req.params.id]);
   if (!chore) return res.status(404).json({ detail: "Afazer não encontrado" });
+  if (chore.status === "done") {
+    const doneRow = await one(
+      `SELECT c.*, u.name AS created_by_name
+       FROM house_chores c LEFT JOIN users u ON u.id=c.created_by_user_id WHERE c.id=?`,
+      [req.params.choreId]
+    );
+    return res.json(await serializeChore(doneRow));
+  }
   if (!(await canCompleteChore(req.params.choreId, req.user.id, req.params.id))) {
     return res.status(403).json({ detail: "Apenas responsáveis ou gestores podem concluir" });
   }
-  await query(
-    `UPDATE house_chore_assignments
-     SET status='done', completed_at=?, completed_by_user_id=?
-     WHERE chore_id=? AND user_id=?`,
-    [nowUtc(), req.user.id, req.params.choreId, req.user.id]
-  );
-  const pending = await one(
-    "SELECT id FROM house_chore_assignments WHERE chore_id=? AND status<>'done' LIMIT 1",
-    [req.params.choreId]
-  );
-  await query(
-    "UPDATE house_chores SET status=?, updated_at=? WHERE id=?",
-    [pending ? "open" : "done", nowUtc(), req.params.choreId]
-  );
-  await query(
-    `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
-    [uuidv4(), req.params.id, req.user.id, "chore.completed", chore.title, nowUtc()]
-  );
+  await tx(async (c) => {
+    const [assignmentRows] = await c.execute(
+      "SELECT id FROM house_chore_assignments WHERE chore_id=? AND user_id=?",
+      [req.params.choreId, req.user.id]
+    );
+    const assignment = assignmentRows[0];
+    if (!assignment) {
+      await c.execute(
+        `INSERT INTO house_chore_assignments (id,chore_id,user_id,status,created_at)
+         VALUES (?,?,?,?,?)`,
+        [uuidv4(), req.params.choreId, req.user.id, "pending", nowUtc()]
+      );
+    }
+    await c.execute(
+      `UPDATE house_chore_assignments
+       SET status='done', completed_at=?, completed_by_user_id=?
+       WHERE chore_id=? AND user_id=?`,
+      [nowUtc(), req.user.id, req.params.choreId, req.user.id]
+    );
+    const [pendingRows] = await c.execute(
+      "SELECT id FROM house_chore_assignments WHERE chore_id=? AND status<>'done' LIMIT 1",
+      [req.params.choreId]
+    );
+    const pending = pendingRows[0];
+    const [nextAssignments] = await c.execute(
+      "SELECT DISTINCT user_id FROM house_chore_assignments WHERE chore_id=?",
+      [req.params.choreId]
+    );
+    await c.execute(
+      "UPDATE house_chores SET status=?, updated_at=? WHERE id=?",
+      [pending ? "open" : "done", nowUtc(), req.params.choreId]
+    );
+    if (!pending) {
+      await createNextRecurringChore(c, chore, nextAssignments);
+    }
+    await c.execute(
+      `INSERT INTO activity_logs (id,house_id,user_id,action,details,created_at) VALUES (?,?,?,?,?,?)`,
+      [uuidv4(), req.params.id, req.user.id, "chore.completed", chore.title, nowUtc()]
+    );
+  });
   const row = await one(
     `SELECT c.*, u.name AS created_by_name
      FROM house_chores c LEFT JOIN users u ON u.id=c.created_by_user_id WHERE c.id=?`,
@@ -1428,6 +1571,7 @@ const REPORT_ACTION_LABELS = {
   "bill.updated": "Conta atualizada",
   "bill.deleted": "Conta removida",
   "chore.created": "Afazer criado",
+  "chore.claimed": "Afazer assumido",
   "chore.completed": "Afazer concluído",
   "chore.deleted": "Afazer removido",
   "house.owner_transferred": "Dono da casa alterado",

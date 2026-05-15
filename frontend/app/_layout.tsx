@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "../src/AuthContext";
+import { AppModeProvider } from "../src/AppModeContext";
 import { SyncStatusBanner } from "../src/SyncStatusBanner";
 import { ThemeProvider, useAppTheme } from "../src/ThemeContext";
 import { prepareNotifications } from "../src/notifications";
@@ -11,9 +12,11 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <AuthProvider>
-          <RootStack />
-        </AuthProvider>
+        <AppModeProvider>
+          <AuthProvider>
+            <RootStack />
+          </AuthProvider>
+        </AppModeProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

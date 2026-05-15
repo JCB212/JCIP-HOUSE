@@ -1,12 +1,14 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppMode } from "../../src/AppModeContext";
 import { useAppTheme } from "../../src/ThemeContext";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 12);
   const { colors } = useAppTheme();
+  const { appMode } = useAppMode();
 
   return (
     <Tabs
@@ -26,8 +28,8 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontSize: 10, fontWeight: "700" },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Início",
-        tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size - 2} color={color} /> }} />
+      <Tabs.Screen name="index" options={{ title: appMode === "house" ? "Lar" : "Início",
+        tabBarIcon: ({ color, size }) => <Ionicons name={appMode === "house" ? "home" : "wallet"} size={size - 2} color={color} /> }} />
       <Tabs.Screen name="expenses" options={{ title: "Gastos",
         tabBarIcon: ({ color, size }) => <Ionicons name="receipt" size={size - 2} color={color} /> }} />
       <Tabs.Screen name="recurring" options={{ title: "Recorrentes",

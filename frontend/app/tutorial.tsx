@@ -10,9 +10,15 @@ import { useAppTheme } from "../src/ThemeContext";
 const SLIDES = [
   {
     icon: "home-outline",
-    title: "Início: o resumo da casa",
-    text: "Aqui você vê o mês atual, o saldo da casa, quanto entrou, quanto saiu e um resumo de cada morador. Se algo estiver estranho, comece conferindo essa tela.",
-    tip: "Toque no mês para acompanhar o ciclo financeiro que está aberto.",
+    title: "Escolha o modo",
+    text: "O app tem dois jeitos de usar. JCIP HOUSE cuida da rotina do lar. JCIP HOUSE FINANCE cuida do dinheiro da casa.",
+    tip: "Use o botão no início para alternar sem misturar as informações.",
+  },
+  {
+    icon: "wallet-outline",
+    title: "Finance: resumo do dinheiro",
+    text: "Aqui você vê o mês atual, saldo, entradas, gastos e quanto cabe para cada morador. Se algo estiver estranho, comece por essa tela.",
+    tip: "Toque no mês para acompanhar outro período.",
   },
   {
     icon: "receipt-outline",
@@ -41,8 +47,8 @@ const SLIDES = [
   {
     icon: "checkbox-outline",
     title: "Afazeres da casa",
-    text: "O dono ou sub-dono cria tarefas, escolhe responsáveis e define dia e hora. Quem recebeu a tarefa marca como feita, e o app guarda data e hora.",
-    tip: "Use isso para pratos, lixo, limpeza, compras ou qualquer rotina da casa.",
+    text: "O dono ou sub-dono cria tarefas com data, hora e repetição. Pode ser todo dia, toda semana, a cada 15 dias, todo mês ou em outro intervalo.",
+    tip: "Se ninguém for marcado, qualquer morador pode assumir a tarefa.",
   },
   {
     icon: "shield-checkmark-outline",

@@ -20,7 +20,7 @@ export default function Index() {
       } else if (!house) {
         router.replace("/onboarding");
       } else if (!(await hasSeenTutorial()) && active) {
-        router.replace("/tutorial");
+        router.replace("/tutorial" as any);
       } else {
         router.replace("/(tabs)");
       }
