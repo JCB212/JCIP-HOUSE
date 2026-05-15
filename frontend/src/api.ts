@@ -16,6 +16,13 @@ export type ApiError = { detail: string };
 export type SyncResult = { synced: number; failed: number; pending: number };
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const API_PATH_RE = /^\/[A-Za-z0-9._~:/?&=,%+-]*$/;
+
+function assertSafeApiPath(path: string) {
+  if (!API_PATH_RE.test(path) || path.startsWith("//") || path.includes("..")) {
+    throw new Error("Caminho de API inválido.");
+  }
+}
 
 function isAuthPath(path: string) {
   return path.startsWith("/auth/");
@@ -49,6 +56,7 @@ async function request<T>(
   path: string,
   opts: RequestInit & { auth?: boolean } = {}
 ): Promise<T> {
+  assertSafeApiPath(path);
   const method = String(opts.method || "GET").toUpperCase();
   const body = typeof opts.body === "string" ? opts.body : opts.body ? JSON.stringify(opts.body) : null;
   const isMutation = MUTATING_METHODS.has(method);
@@ -119,6 +127,7 @@ export async function syncPendingOperations(): Promise<SyncResult> {
 
   for (const op of operations) {
     try {
+      assertSafeApiPath(op.path);
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (op.auth && token) headers["Authorization"] = `Bearer ${token}`;
       const res = await fetch(`${BASE}/api${op.path}`, {

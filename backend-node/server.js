@@ -17,10 +17,16 @@ const {
   findLogicalMonth, monthRangeFor, optimizeDebts,
 } = require("./utils");
 
-const JWT_SECRET = process.env.JWT_SECRET || "change-me";
+const isProduction = process.env.NODE_ENV === "production";
+const JWT_SECRET = process.env.JWT_SECRET || "";
+if (isProduction && (!JWT_SECRET || JWT_SECRET === "change-me" || JWT_SECRET.length < 32)) {
+  throw new Error("JWT_SECRET obrigatório em produção com pelo menos 32 caracteres");
+}
+const JWT_SIGNING_SECRET = JWT_SECRET || "dev-only-change-me";
 const JWT_EXPIRE_DAYS = Number(process.env.JWT_EXPIRE_DAYS || 30);
 const PORT = Number(process.env.PORT || 8001);
 const RESET_CODE_MINUTES = Number(process.env.RESET_CODE_MINUTES || 30);
+const PASSWORD_MIN_LENGTH = Number(process.env.PASSWORD_MIN_LENGTH || 8);
 const startupState = {
   migrations: "pending",
   migrations_error_code: null,
@@ -28,11 +34,25 @@ const startupState = {
 
 const app = express();
 app.disable("x-powered-by");
+app.set("query parser", "simple");
 app.set("trust proxy", Number(process.env.TRUST_PROXY || 1));
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  referrerPolicy: { policy: "no-referrer" },
+}));
 const corsOrigin = process.env.CORS_ORIGIN || "*";
 app.use(cors({ origin: corsOrigin === "*" ? "*" : corsOrigin.split(",").map((s) => s.trim()) }));
-app.use(express.json({ limit: "2mb" }));
+app.use((req, res, next) => {
+  if (["POST", "PUT", "PATCH"].includes(req.method) && req.headers["content-length"] !== "0" && !req.is("application/json")) {
+    return res.status(415).json({ detail: "Use Content-Type: application/json" });
+  }
+  next();
+});
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "256kb", strict: true }));
+app.use((_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -47,13 +67,66 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { detail: "Muitas tentativas. Aguarde alguns minutos e tente novamente." },
 });
+const passwordResetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: Number(process.env.PASSWORD_RESET_RATE_LIMIT_MAX || 8),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { detail: "Muitas tentativas de redefinição. Aguarde e tente novamente." },
+});
 app.use("/api", apiLimiter);
 
 const api = express.Router();
 
 // ---------- helpers ----------
 function signToken(userId) {
-  return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: `${JWT_EXPIRE_DAYS}d` });
+  return jwt.sign({ sub: userId }, JWT_SIGNING_SECRET, { expiresIn: `${JWT_EXPIRE_DAYS}d` });
+}
+
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function validateUuidParam(label) {
+  return (_req, res, next, value) => {
+    if (!uuidRegex.test(String(value || ""))) {
+      return res.status(400).json({ detail: `${label} inválido` });
+    }
+    next();
+  };
+}
+
+function normalizeEmail(email) {
+  return String(email || "").toLowerCase().trim();
+}
+
+function isEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ""));
+}
+
+function validatePassword(password) {
+  const value = String(password || "");
+  if (value.length < PASSWORD_MIN_LENGTH || value.length > 128) return false;
+  return true;
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function hasUnsafeKeys(value, depth = 0) {
+  if (depth > 20) return true;
+  if (!value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some((item) => hasUnsafeKeys(item, depth + 1));
+  for (const key of Object.keys(value)) {
+    if (key === "__proto__" || key === "prototype" || key === "constructor") return true;
+    if (hasUnsafeKeys(value[key], depth + 1)) return true;
+  }
+  return false;
+}
+
+function rejectUnsafeInput(req, res, next) {
+  if (hasUnsafeKeys(req.body) || hasUnsafeKeys(req.query)) {
+    return res.status(400).json({ detail: "Requisição inválida" });
+  }
+  next();
 }
 
 async function auth(req, res, next) {
@@ -153,6 +226,22 @@ async function ensurePermission(houseId, userId, permission) {
   return { member, house };
 }
 
+async function ensureAnyPermission(houseId, userId, permissions) {
+  const member = await ensureMember(houseId, userId);
+  const house = await one("SELECT * FROM houses WHERE id=?", [houseId]);
+  if (!house) {
+    const err = new Error("Casa não encontrada");
+    err.status = 404;
+    throw err;
+  }
+  if (!permissions?.length || permissions.some((permission) => canMember(member, house, permission))) {
+    return { member, house };
+  }
+  const err = new Error("Sem permissão para esta ação");
+  err.status = 403;
+  throw err;
+}
+
 function sanitizeUser(u) {
   return { id: u.id, email: u.email, name: u.name, avatar_url: u.avatar_url || null };
 }
@@ -160,7 +249,7 @@ function sanitizeUser(u) {
 function resetCodeHash(email, code) {
   return crypto
     .createHash("sha256")
-    .update(`${String(email).toLowerCase().trim()}:${String(code).trim()}:${JWT_SECRET}`)
+    .update(`${String(email).toLowerCase().trim()}:${String(code).trim()}:${JWT_SIGNING_SECRET}`)
     .digest("hex");
 }
 
@@ -200,9 +289,27 @@ function wrap(fn) {
   return (req, res) => {
     Promise.resolve(fn(req, res)).catch((e) => {
       console.error(e);
-      res.status(e.status || 500).json({ detail: e.message || "Erro interno" });
+      const status = e.status || 500;
+      res.status(status).json({ detail: status >= 500 ? "Erro interno. Tente novamente." : (e.message || "Erro interno") });
     });
   };
+}
+
+api.use(rejectUnsafeInput);
+for (const [param, label] of Object.entries({
+  id: "Casa",
+  userId: "Usuário",
+  mid: "Mês",
+  eid: "Gasto",
+  cid: "Contribuição",
+  cat: "Categoria",
+  itemId: "Item",
+  billId: "Conta",
+  choreId: "Afazer",
+  rid: "Recorrente",
+  pid: "Plano",
+})) {
+  api.param(param, validateUuidParam(label));
 }
 
 // ---------- seed defaults ----------
@@ -361,48 +468,54 @@ api.get("/", (_req, res) => res.json({ message: "JCIP House Finance API (Node.js
 
 api.get("/health", async (_req, res) => {
   const startedAt = Date.now();
+  const exposeDetails = process.env.EXPOSE_HEALTH_DETAILS === "true";
   try {
     await one("SELECT 1 AS ok");
-    res.json({
+    const payload = {
       status: "ok",
       api: "online",
       database: "online",
-      db_configured: !!process.env.DB_NAME,
       migrations: startupState.migrations,
       latency_ms: Date.now() - startedAt,
       timestamp: nowUtc(),
-    });
+    };
+    if (exposeDetails) payload.db_configured = !!process.env.DB_NAME;
+    res.json(payload);
   } catch (e) {
-    res.status(503).json({
+    const payload = {
       status: "degraded",
       api: "online",
       database: "offline",
-      db_configured: !!process.env.DB_NAME,
       migrations: startupState.migrations,
-      db_error_code: e?.code || "UNKNOWN",
-      startup_error_code: startupState.migrations_error_code,
       latency_ms: Date.now() - startedAt,
       timestamp: nowUtc(),
-    });
+    };
+    if (exposeDetails) {
+      payload.db_configured = !!process.env.DB_NAME;
+      payload.db_error_code = e?.code || "UNKNOWN";
+      payload.startup_error_code = startupState.migrations_error_code;
+    }
+    res.status(503).json(payload);
   }
 });
 
 // AUTH
 api.post("/auth/register", authLimiter, wrap(async (req, res) => {
   const { email, name, password } = req.body || {};
-  if (!email || !name || !password || password.length < 6) {
-    return res.status(400).json({ detail: "Dados inválidos (senha mín. 6 chars)" });
+  const em = normalizeEmail(email);
+  const cleanName = String(name || "").trim();
+  if (!isEmail(em) || cleanName.length < 2 || !validatePassword(password)) {
+    return res.status(400).json({ detail: `Dados inválidos. Use e-mail válido, nome e senha com no mínimo ${PASSWORD_MIN_LENGTH} caracteres.` });
   }
-  const em = String(email).toLowerCase().trim();
   const exists = await one("SELECT id FROM users WHERE email=?", [em]);
   if (exists) return res.status(400).json({ detail: "Este email já está cadastrado" });
-  const hash = await bcrypt.hash(password, 10);
+  const hash = await bcrypt.hash(String(password), 10);
   const id = uuidv4();
   const n = nowUtc();
   await tx(async (c) => {
     await c.execute(
       `INSERT INTO users (id,email,name,password_hash,created_at,updated_at) VALUES (?,?,?,?,?,?)`,
-      [id, em, String(name).trim(), hash, n, n]
+      [id, em, cleanName.slice(0, 120), hash, n, n]
     );
     if (req.body?.accepted_lgpd === true) {
       await c.execute(
@@ -426,8 +539,9 @@ api.post("/auth/register", authLimiter, wrap(async (req, res) => {
 
 api.post("/auth/login", authLimiter, wrap(async (req, res) => {
   const { email, password } = req.body || {};
-  const u = await one("SELECT * FROM users WHERE email=?", [String(email || "").toLowerCase().trim()]);
+  const u = await one("SELECT * FROM users WHERE email=?", [normalizeEmail(email)]);
   if (!u || !(await bcrypt.compare(password || "", u.password_hash))) {
+    await wait(250 + crypto.randomInt(0, 250));
     return res.status(401).json({ detail: "Email ou senha inválidos" });
   }
   res.json({ token: signToken(u.id), user: sanitizeUser(u) });
@@ -443,9 +557,9 @@ api.put("/auth/me", auth, wrap(async (req, res) => {
   res.json(sanitizeUser(fresh));
 }));
 
-api.post("/auth/forgot-password", authLimiter, wrap(async (req, res) => {
-  const email = String(req.body?.email || "").toLowerCase().trim();
-  if (!email) return res.status(400).json({ detail: "Informe o e-mail" });
+api.post("/auth/forgot-password", passwordResetLimiter, wrap(async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  if (!isEmail(email)) return res.status(400).json({ detail: "Informe um e-mail válido" });
   const u = await one("SELECT * FROM users WHERE email=?", [email]);
   if (!u) {
     return res.json({ ok: true, message: "Se o e-mail existir, enviaremos um código de redefinição." });
@@ -460,12 +574,12 @@ api.post("/auth/forgot-password", authLimiter, wrap(async (req, res) => {
   res.json({ ok: true, message: "Código enviado para o e-mail informado." });
 }));
 
-api.post("/auth/reset-password", authLimiter, wrap(async (req, res) => {
-  const email = String(req.body?.email || "").toLowerCase().trim();
+api.post("/auth/reset-password", passwordResetLimiter, wrap(async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
   const code = String(req.body?.code || "").trim();
   const password = String(req.body?.password || "");
-  if (!email || !code || password.length < 6) {
-    return res.status(400).json({ detail: "Informe e-mail, código e senha com no mínimo 6 caracteres" });
+  if (!isEmail(email) || !/^\d{6}$/.test(code) || !validatePassword(password)) {
+    return res.status(400).json({ detail: `Informe e-mail, código de 6 números e senha com no mínimo ${PASSWORD_MIN_LENGTH} caracteres` });
   }
   const u = await one("SELECT * FROM users WHERE email=?", [email]);
   if (!u) return res.status(400).json({ detail: "Código inválido ou expirado" });
@@ -476,7 +590,7 @@ api.post("/auth/reset-password", authLimiter, wrap(async (req, res) => {
     [u.id, email, resetCodeHash(email, code), nowUtc()]
   );
   if (!token) return res.status(400).json({ detail: "Código inválido ou expirado" });
-  const hash = await bcrypt.hash(password, 10);
+  const hash = await bcrypt.hash(String(password), 10);
   await tx(async (c) => {
     await c.execute("UPDATE users SET password_hash=?, updated_at=? WHERE id=?", [hash, nowUtc(), u.id]);
     await c.execute("UPDATE password_reset_tokens SET used_at=? WHERE id=?", [nowUtc(), token.id]);
@@ -714,7 +828,7 @@ api.delete("/houses/:id/categories/:cat", auth, wrap(async (req, res) => {
 
 // MONTHS
 api.get("/houses/:id/months", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensureAnyPermission(req.params.id, req.user.id, ["view_dashboard", "view_statement", "view_reports", "manage_settings"]);
   const h = await one("SELECT * FROM houses WHERE id=?", [req.params.id]);
   await currentMonth(h.id, h.month_start_day);
   const ms = await query(
@@ -832,7 +946,7 @@ api.post("/houses/:id/expenses", auth, wrap(async (req, res) => {
 }));
 
 api.get("/houses/:id/expenses", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensureAnyPermission(req.params.id, req.user.id, ["view_statement", "view_reports", "manage_expenses"]);
   const { month_id } = req.query;
   const params = [req.params.id];
   let sql = "SELECT * FROM expenses WHERE house_id=?";
@@ -890,7 +1004,7 @@ api.post("/houses/:id/contributions", auth, wrap(async (req, res) => {
 }));
 
 api.get("/houses/:id/contributions", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensureAnyPermission(req.params.id, req.user.id, ["view_statement", "view_reports", "manage_contributions"]);
   const params = [req.params.id];
   let sql = `SELECT c.*, u.name AS user_name FROM contributions c
              JOIN users u ON u.id=c.user_id WHERE c.house_id=?`;
@@ -1756,7 +1870,7 @@ api.get("/houses/:id/reports", auth, wrap(async (req, res) => {
 
 // RECURRING
 api.get("/houses/:id/recurring", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensureAnyPermission(req.params.id, req.user.id, ["view_statement", "view_reports", "manage_recurring"]);
   const rows = await query(
     `SELECT r.*, c.name AS category_name, u.name AS payer_name
      FROM recurring_expenses r
@@ -1847,7 +1961,7 @@ api.delete("/houses/:id/recurring/:rid", auth, wrap(async (req, res) => {
 
 // CONTRIBUTION PLANS
 api.get("/houses/:id/contribution-plans", auth, wrap(async (req, res) => {
-  await ensureMember(req.params.id, req.user.id);
+  await ensureAnyPermission(req.params.id, req.user.id, ["view_statement", "view_reports", "manage_contributions"]);
   const rows = await query(
     `SELECT p.*, u.name AS user_name FROM contribution_plans p
      JOIN users u ON u.id=p.user_id WHERE p.house_id=?`,
@@ -2099,6 +2213,10 @@ api.get("/houses/:id/dashboard", auth, wrap(async (req, res) => {
     recent_expenses,
   });
 }));
+
+api.use((_req, res) => {
+  res.status(404).json({ detail: "Rota não encontrada" });
+});
 
 app.use("/api", api);
 

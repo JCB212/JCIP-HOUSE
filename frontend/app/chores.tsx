@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, usePathname, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../src/api";
 import { useAuth } from "../src/AuthContext";
@@ -36,11 +36,11 @@ type Chore = {
 };
 
 const WEEK_DAYS = ["D", "S", "T", "Q", "Q", "S", "S"];
-const MONTH_NAMES = ["Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const MONTH_NAMES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const TIME_SLOTS = ["06:00", "08:00", "12:00", "18:00", "21:00"];
 const RECURRENCE_OPTIONS = [
   { value: "none", label: "Uma vez" },
-  { value: "daily", label: "Diario" },
+  { value: "daily", label: "Diário" },
   { value: "weekly", label: "Semanal" },
   { value: "biweekly", label: "Quinzenal" },
   { value: "monthly", label: "Mensal" },
@@ -102,6 +102,8 @@ export default function Chores() {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
   const router = useRouter();
+  const pathname = usePathname();
+  const openedFromTab = pathname === "/house-tasks";
   const [items, setItems] = useState<Chore[]>([]);
   const [loading, setLoading] = useState(false);
   const [title, setTitle] = useState("");
@@ -242,9 +244,11 @@ export default function Chores() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top"]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
+        {openedFromTab ? <View style={styles.iconBtn} /> : (
+          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+            <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+        )}
         <Text style={styles.headerTitle}>Afazeres da casa</Text>
         <View style={{ width: 42 }} />
       </View>

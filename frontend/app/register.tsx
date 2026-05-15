@@ -30,8 +30,8 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
 
   async function onSubmit() {
-    if (name.trim().length < 2 || !email.trim() || pwd.length < 6) {
-      Alert.alert("Atenção", "Preencha nome, email e senha (mín. 6 caracteres)");
+    if (name.trim().length < 2 || !email.trim() || pwd.length < 8) {
+      Alert.alert("Atenção", "Preencha nome, email e senha (mín. 8 caracteres)");
       return;
     }
     if (!accepted) {
@@ -101,7 +101,7 @@ export default function Register() {
             <TextInput
               testID="register-password-input"
               style={styles.input}
-              placeholder="Mínimo 6 caracteres"
+              placeholder="Mínimo 8 caracteres"
               placeholderTextColor={colors.textMuted}
               secureTextEntry
               value={pwd}

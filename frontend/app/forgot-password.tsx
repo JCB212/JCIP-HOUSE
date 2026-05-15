@@ -47,8 +47,8 @@ export default function ForgotPassword() {
   }
 
   async function resetPassword() {
-    if (!code.trim() || password.length < 6 || password !== confirm) {
-      Alert.alert("Atenção", "Digite o código e confirme uma senha com no mínimo 6 caracteres");
+    if (!code.trim() || password.length < 8 || password !== confirm) {
+      Alert.alert("Atenção", "Digite o código e confirme uma senha com no mínimo 8 caracteres");
       return;
     }
     setLoading(true);
@@ -113,7 +113,7 @@ export default function ForgotPassword() {
                 <Text style={styles.label}>Nova senha</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="mínimo 6 caracteres"
+                  placeholder="mínimo 8 caracteres"
                   placeholderTextColor={colors.textMuted}
                   secureTextEntry
                   value={password}

@@ -140,7 +140,7 @@ export default function Profile() {
           <Text style={[styles.rowTitle, { color: colors.debt, flex: 1 }]}>Sair da conta</Text>
         </TouchableOpacity>
 
-        <Text style={styles.footer}>JCIP House v1.2.2</Text>
+        <Text style={styles.footer}>JCIP House v1.2.3</Text>
       </ScrollView>
     </SafeAreaView>
   );

@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, usePathname, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../src/api";
 import { useAuth } from "../src/AuthContext";
@@ -34,6 +34,8 @@ export default function Bills() {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
   const router = useRouter();
+  const pathname = usePathname();
+  const openedFromTab = pathname === "/house-bills";
   const [tab, setTab] = useState<"payable" | "receivable">("payable");
   const [items, setItems] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(false);
@@ -123,9 +125,11 @@ export default function Bills() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top"]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
+        {openedFromTab ? <View style={styles.iconBtn} /> : (
+          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+            <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+        )}
         <Text style={styles.headerTitle}>Contas</Text>
         <View style={{ width: 42 }} />
       </View>
